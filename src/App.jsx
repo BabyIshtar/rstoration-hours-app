@@ -108,6 +108,11 @@ const loginTips = [
 ];
 
 const spring = { duration: 0.42, ease: [0.22, 1, 0.36, 1] };
+
+const floatingAnimation = {
+  animate: { y: [0, -3, 0] },
+  transition: { duration: 5.5, repeat: Infinity, ease: "easeInOut" },
+};
 const softMotion = {
   initial: { opacity: 0, y: 14, scale: 0.99 },
   animate: { opacity: 1, y: 0, scale: 1 },
@@ -253,7 +258,7 @@ function Button({ children, className = "", variant = "default", size = "default
   return (
     <button
       className={cx(
-        "inline-flex items-center justify-center rounded-2xl font-bold tracking-[-0.01em] transition duration-300 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex max-w-full items-center justify-center overflow-hidden rounded-2xl font-bold tracking-[-0.01em] transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
         variants[variant] || variants.default,
         sizes[size] || sizes.default,
         className
@@ -266,11 +271,11 @@ function Button({ children, className = "", variant = "default", size = "default
 }
 
 function Card({ children, className = "" }) {
-  return <div className={cx("rounded-[1.6rem] border border-white/55 bg-slate-100/64 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
+  return <div className={cx("max-w-full overflow-hidden rounded-[1.6rem] border border-white/55 bg-slate-100/64 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 transition-all duration-300 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
 }
 
 function CardContent({ children, className = "" }) {
-  return <div className={cx("p-4 sm:p-5", className)}>{children}</div>;
+  return <div className={cx("max-w-full overflow-hidden p-4 sm:p-5", className)}>{children}</div>;
 }
 
 function StatusPill({ status }) {
@@ -1030,11 +1035,11 @@ export default function RestorationHoursTracker() {
   }
 
   return (
-    <div className={cx("relative min-h-dvh overflow-x-hidden font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")}>
+    <div className={cx("relative min-h-screen w-full overflow-x-hidden mobile-safe font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition-all duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")}>
       <div className="pointer-events-none fixed -left-28 top-20 h-80 w-80 rounded-full bg-cyan-300/14 blur-3xl" />
       <div className="pointer-events-none fixed -right-32 top-1/2 h-96 w-96 rounded-full bg-slate-600/12 blur-3xl" />
-      <div className="relative mx-auto w-full max-w-[1540px] px-2 py-2 sm:px-4 sm:py-4 lg:px-5">
-        <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex flex-col gap-3 rounded-[1.6rem] border border-white/55 bg-slate-100/72 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
+      <div className="relative mx-auto w-full max-w-[1540px] overflow-x-hidden px-3 py-3 sm:px-4 sm:py-4 lg:px-5 mobile-padding">
+        <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex max-w-full flex-col gap-3 overflow-hidden rounded-[1.6rem] border border-white/55 bg-slate-100/72 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-cyan-700/10 ring-1 ring-white/80 sm:h-12 sm:w-12">
               <img src={iconLogo} alt="Voda icon" className="h-8 w-8 object-contain sm:h-9 sm:w-9" />
@@ -1072,9 +1077,9 @@ export default function RestorationHoursTracker() {
           isAdmin={currentUser.role === "admin"}
         />
 
-        <main className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr] xl:gap-5">
-          <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="space-y-4 sm:space-y-5">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+        <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
+          <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
+            <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
               <MetricCard icon={<Clock />} label="Weekly Hours" value={moneylessHours(weeklyTotal)} />
               <MetricCard icon={<AlertCircle />} label="Pending" value={pendingCount} />
               <MetricCard icon={<CheckCircle2 />} label="Approved Payroll" value={moneylessHours(approvedPayrollTotal)} />
@@ -1125,7 +1130,7 @@ export default function RestorationHoursTracker() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.03, ...spring }}
                             className={cx(
-                              "group relative min-h-[224px] rounded-[1.25rem] border p-3 text-center shadow-xl backdrop-blur-2xl transition duration-300 sm:min-h-[242px]",
+                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.25rem] border p-3 text-center shadow-xl backdrop-blur-2xl transition-all duration-300 ease-out will-change-transform sm:min-h-[242px]",
                               "border-white/15 bg-white/[0.075] hover:-translate-y-0.5 hover:bg-white/[0.105] hover:shadow-2xl hover:shadow-cyan-950/20",
                               isToday && "border-cyan-400/90 ring-2 ring-cyan-400/60"
                             )}
@@ -1306,7 +1311,7 @@ export default function RestorationHoursTracker() {
             </Card>
           </motion.section>
 
-          <motion.aside {...softMotion} transition={{ ...spring, delay: 0.12 }} className="space-y-4 sm:space-y-5">
+          <motion.aside {...softMotion} transition={{ ...spring, delay: 0.12 }} className="min-w-0 space-y-4 sm:space-y-5">
             {currentUser.role === "admin" && (
               <Card>
                 <CardContent>
@@ -1747,7 +1752,89 @@ const inputStyles = `
     text-size-adjust: 100%;
   }
   * { box-sizing: border-box; }
-  @media (max-width: 430px) {
-    body { zoom: 0.94; }
+
+/* Global viewport + mobile polish */
+html {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+.card,
+.glass-card,
+.panel,
+.dashboard-card,
+.mobile-safe {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.input {
+  width: 100%;
+  max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
   }
+
+  .mobile-safe {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .mobile-padding {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .grid {
+    min-width: 0;
+  }
+}
 `;
