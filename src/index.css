@@ -86,3 +86,487 @@ select {
     min-width: 0;
   }
 }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { width: 100%; min-height: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { margin: 0; overscroll-behavior: none; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+*, *::before, *::after { box-sizing: border-box; }
+img, svg, video, canvas { max-width: 100%; display: block; }
+button, input, textarea, select { transition: transform 220ms cubic-bezier(.22,1,.36,1), opacity 220ms cubic-bezier(.22,1,.36,1), background-color 220ms cubic-bezier(.22,1,.36,1), border-color 220ms cubic-bezier(.22,1,.36,1), box-shadow 220ms cubic-bezier(.22,1,.36,1); }
+button:hover { transform: translateY(-1px); }
+button:active { transform: scale(.985); }
+.dark { color-scheme: dark; }
+.dark header, .dark .card, .dark .glass-card, .dark .panel, .dark .dashboard-card, .dark [class*="bg-slate-100/"], .dark [class*="bg-slate-50/"], .dark [class*="dark:bg-slate-900/"], .dark [class*="dark:bg-white/"], .dark [class*="bg-white/"] { background: rgba(12,18,28,.86) !important; border-color: rgba(148,163,184,.14) !important; box-shadow: 0 18px 58px rgba(0,0,0,.38) !important; }
+.dark [class*="dark:bg-white/5"], .dark [class*="dark:bg-white/7"], .dark [class*="dark:bg-white/10"], .dark [class*="bg-white/[0.035]"], .dark [class*="bg-white/[0.06]"] { background: rgba(18,27,40,.78) !important; border-color: rgba(148,163,184,.13) !important; }
+.dark input, .dark select, .dark textarea, .dark .input { background: rgba(8,13,22,.94) !important; border: 1px solid rgba(148,163,184,.18) !important; color: #f8fafc !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 10px 30px rgba(0,0,0,.18) !important; }
+.dark input::placeholder, .dark textarea::placeholder { color: rgba(203,213,225,.55) !important; }
+.dark .text-slate-500, .dark .text-slate-400, .dark .text-slate-300 { color: rgba(203,213,225,.82) !important; }
+.dark .text-slate-600, .dark .text-slate-700 { color: rgba(226,232,240,.88) !important; }
+@media (max-width: 768px) { .mobile-padding { padding-left: 14px !important; padding-right: 14px !important; } }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  display: block;
+}
+
+button,
+input,
+textarea,
+select {
+  max-width: 100%;
+  transition:
+    transform 220ms cubic-bezier(.22, 1, .36, 1),
+    opacity 220ms cubic-bezier(.22, 1, .36, 1),
+    background-color 220ms cubic-bezier(.22, 1, .36, 1),
+    border-color 220ms cubic-bezier(.22, 1, .36, 1),
+    box-shadow 220ms cubic-bezier(.22, 1, .36, 1);
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: scale(.985);
+}
+
+.card,
+.glass-card,
+.panel,
+.dashboard-card,
+.mobile-safe {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.input {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* GODDARD DARK MODE READABILITY RESCUE
+   Keeps the older deep charcoal/navy look, but fixes low-contrast text. */
+.dark {
+  color-scheme: dark;
+}
+
+.dark,
+.dark body,
+.dark #root {
+  color: #f8fafc;
+}
+
+/* Deep navy blocks instead of washed-out light glass. */
+.dark header,
+.dark .card,
+.dark .glass-card,
+.dark .panel,
+.dark .dashboard-card,
+.dark [class*="bg-slate-100/"],
+.dark [class*="bg-slate-50/"],
+.dark [class*="dark:bg-slate-900/"],
+.dark [class*="dark:bg-white/"],
+.dark [class*="bg-white/"] {
+  background: rgba(12, 18, 28, .88) !important;
+  border-color: rgba(148, 163, 184, .16) !important;
+  box-shadow: 0 18px 58px rgba(0, 0, 0, .38) !important;
+}
+
+/* Inner soft blocks. */
+.dark [class*="dark:bg-white/5"],
+.dark [class*="dark:bg-white/7"],
+.dark [class*="dark:bg-white/10"],
+.dark [class*="bg-white/[0.035]"],
+.dark [class*="bg-white/[0.06]"],
+.dark [class*="bg-slate-950/20"],
+.dark [class*="bg-slate-950/25"] {
+  background: rgba(18, 27, 40, .82) !important;
+  border-color: rgba(148, 163, 184, .14) !important;
+}
+
+/* Main text contrast fixes. */
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-black {
+  color: #f8fafc !important;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-600 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+.dark p,
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6,
+.dark label,
+.dark span,
+.dark div {
+  text-shadow: none;
+}
+
+/* Keep accent colors readable and luxury-feeling. */
+.dark .text-cyan-700,
+.dark .text-cyan-600 {
+  color: #67e8f9 !important;
+}
+
+.dark .text-cyan-300,
+.dark .text-cyan-200 {
+  color: #a5f3fc !important;
+}
+
+.dark .text-emerald-700,
+.dark .text-emerald-600 {
+  color: #86efac !important;
+}
+
+.dark .text-amber-700,
+.dark .text-amber-600 {
+  color: #fde68a !important;
+}
+
+.dark .text-red-800,
+.dark .text-red-700,
+.dark .text-red-600 {
+  color: #fecaca !important;
+}
+
+.dark .text-blue-700,
+.dark .text-blue-600 {
+  color: #bfdbfe !important;
+}
+
+/* Inputs/forms. */
+.dark input,
+.dark select,
+.dark textarea,
+.dark .input {
+  background: rgba(8, 13, 22, .96) !important;
+  border: 1px solid rgba(148, 163, 184, .22) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035), 0 10px 30px rgba(0, 0, 0, .18) !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: rgba(203, 213, 225, .7) !important;
+}
+
+.dark select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+/* Buttons: preserve white primary buttons with dark text in dark mode. */
+.dark button.bg-white,
+.dark button[class*="dark:bg-white"] {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border-color: rgba(255, 255, 255, .25) !important;
+}
+
+.dark button.bg-transparent,
+.dark button[class*="bg-transparent"] {
+  background: transparent !important;
+  color: #e2e8f0 !important;
+}
+
+.dark button[class*="border-white"],
+.dark button[class*="bg-white/10"],
+.dark button[class*="bg-white/15"] {
+  background: rgba(18, 27, 40, .88) !important;
+  color: #f8fafc !important;
+  border-color: rgba(148, 163, 184, .2) !important;
+}
+
+/* Status pills/cards: make text readable but keep status colors. */
+.dark [class*="bg-amber"],
+.dark [class*="bg-blue"],
+.dark [class*="bg-emerald"],
+.dark [class*="bg-red"] {
+  border-color: rgba(255, 255, 255, .16) !important;
+}
+
+.dark [class*="bg-amber"] { background: rgba(245, 158, 11, .18) !important; color: #fde68a !important; }
+.dark [class*="bg-blue"] { background: rgba(59, 130, 246, .18) !important; color: #bfdbfe !important; }
+.dark [class*="bg-emerald"] { background: rgba(16, 185, 129, .18) !important; color: #bbf7d0 !important; }
+.dark [class*="bg-red"] { background: rgba(239, 68, 68, .2) !important; color: #fecaca !important; }
+
+/* Tables, modals, message areas, and calendar details. */
+.dark table,
+.dark thead,
+.dark tbody,
+.dark tr,
+.dark td,
+.dark th,
+.dark dialog,
+.dark [role="dialog"] {
+  color: #f8fafc !important;
+  border-color: rgba(148, 163, 184, .16) !important;
+}
+
+.dark .line-through {
+  color: #94a3b8 !important;
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .mobile-padding {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .grid {
+    min-width: 0;
+  }
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  display: block;
+}
+
+button,
+input,
+textarea,
+select {
+  max-width: 100%;
+}
+
+.card,
+.glass-card,
+.panel,
+.dashboard-card,
+.mobile-safe {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.input {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 1rem;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0.95rem 1rem;
+  color: #0f172a;
+  font-weight: 700;
+  outline: none;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.input::placeholder {
+  color: rgba(100, 116, 139, 0.72);
+}
+
+button,
+input,
+textarea,
+select {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 220ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1), color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: scale(0.985);
+}
+
+/* Admin-safe dark mode rescue: CSS only. Does not touch App.jsx logic. */
+.dark {
+  color-scheme: dark;
+}
+
+.dark .input,
+.dark input,
+.dark select,
+.dark textarea {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.25) !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: rgba(203, 213, 225, 0.62) !important;
+}
+
+/* Keep the older deep grey/navy feel without breaking admin components. */
+.dark .bg-slate-100\/64,
+.dark .bg-slate-100\/70,
+.dark .bg-slate-100\/72,
+.dark .bg-white\/48,
+.dark .bg-white\/75,
+.dark .bg-white\/80,
+.dark .bg-slate-50\/75,
+.dark .bg-slate-50\/80,
+.dark .bg-white\/10,
+.dark .bg-white\/15 {
+  background-color: rgba(15, 23, 42, 0.82) !important;
+}
+
+.dark .bg-slate-900\/62,
+.dark .bg-slate-900\/68 {
+  background-color: rgba(12, 18, 28, 0.9) !important;
+}
+
+.dark .border-white\/55,
+.dark .border-white\/60,
+.dark .border-white\/70,
+.dark .border-white\/10,
+.dark .border-white\/15,
+.dark .border-slate-200\/80,
+.dark .border-slate-200 {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+.dark .ring-white\/45,
+.dark .ring-white\/55,
+.dark .ring-white\/60,
+.dark .ring-white\/80,
+.dark .ring-white\/10 {
+  --tw-ring-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+/* Readability, but avoid changing status pills too heavily. */
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+  color: #f8fafc !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500 {
+  color: rgba(226, 232, 240, 0.82) !important;
+}
+
+.dark .text-slate-400,
+.dark .text-slate-300 {
+  color: rgba(226, 232, 240, 0.72) !important;
+}
+
+.dark .text-cyan-600,
+.dark .text-cyan-700 {
+  color: #67e8f9 !important;
+}
+
+.dark .shadow-xl,
+.dark .shadow-2xl {
+  --tw-shadow-color: rgba(0, 0, 0, 0.35) !important;
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .mobile-safe {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .mobile-padding {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .grid {
+    min-width: 0;
+  }
+}
