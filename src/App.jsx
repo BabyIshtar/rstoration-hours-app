@@ -17,7 +17,6 @@ import {
   Fingerprint,
   Edit3,
   LogOut,
-  MapPin,
   MessageSquare,
   Moon,
   PenLine,
@@ -26,7 +25,6 @@ import {
   Send,
   Settings,
   ShieldCheck,
-  Smartphone,
   Sparkles,
   Sun,
   Upload,
@@ -334,9 +332,6 @@ export default function RestorationHoursTracker() {
   const [appLoading, setAppLoading] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [authMode, setAuthMode] = useState("login");
-  const [signupMessage, setSignupMessage] = useState("");
-  const [signupForm, setSignupForm] = useState({ firstName: "", lastName: "", email: "", phone: "", password: "", confirmPassword: "" });
   const [loginError, setLoginError] = useState("");
   const [appError, setAppError] = useState("");
   const [darkMode, setDarkMode] = useState(false);
@@ -349,6 +344,7 @@ export default function RestorationHoursTracker() {
   const [liveShift, setLiveShift] = useState(() => {
     try { return JSON.parse(localStorage.getItem("vodaLiveShift") || "null"); } catch { return null; }
   });
+  const [stoppedShiftReview, setStoppedShiftReview] = useState(null);
   const loginTip = useMemo(() => loginTips[Math.floor(Math.random() * loginTips.length)], []);
 
   const [employees, setEmployees] = useState([]);
@@ -382,7 +378,6 @@ export default function RestorationHoursTracker() {
   });
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
-  const pendingProfiles = useMemo(() => employees.filter((employee) => employee.approvalStatus === "pending"), [employees]);
   const weekDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index)), [weekStart]);
   const historyCalendarDays = useMemo(() => getCalendarGridDates(historyMonth), [historyMonth]);
 
@@ -472,20 +467,6 @@ export default function RestorationHoursTracker() {
     }
     const firstName = data.first_name || "";
     const lastName = data.last_name || "";
-    const role = data.role || "employee";
-    const approvalStatus = data.approval_status || (role === "admin" ? "approved" : "pending");
-
-    if (role !== "admin" && approvalStatus !== "approved") {
-      setCurrentUser(null);
-      setLoginError(
-        approvalStatus === "denied"
-          ? "Your employee account request was denied. Please contact an admin."
-          : "Your employee account is pending admin approval. You will be able to access the portal once an admin approves it."
-      );
-      await supabase.auth.signOut();
-      return;
-    }
-
     const displayName = data.full_name || `${firstName} ${lastName}`.trim() || user.email;
     setLoginError("");
     setCurrentUser({
@@ -495,9 +476,8 @@ export default function RestorationHoursTracker() {
       lastName,
       phone: data.phone || "",
       avatarUrl: data.avatar_url || "",
-      email: data.email || user.email || "",
-      role,
-      approvalStatus,
+      email: user.email || "",
+      role: data.role || "employee",
     });
     setProfileForm({ firstName, lastName, phone: data.phone || "", avatarUrl: data.avatar_url || "" });
   }
@@ -508,8 +488,8 @@ export default function RestorationHoursTracker() {
 
     const isAdmin = currentUser?.role === "admin";
     const profilesQuery = isAdmin
-      ? supabase.from("profiles").select("id, full_name, first_name, last_name, email, phone, avatar_url, role, approval_status, approved_by, approved_at").order("full_name", { ascending: true })
-      : Promise.resolve({ data: [{ id: currentUser.id, full_name: currentUser.name, first_name: currentUser.firstName, last_name: currentUser.lastName, phone: currentUser.phone, avatar_url: currentUser.avatarUrl, role: currentUser.role, email: currentUser.email, approval_status: currentUser.approvalStatus || "approved" }], error: null });
+      ? supabase.from("profiles").select("id, full_name, first_name, last_name, phone, avatar_url, role").order("full_name", { ascending: true })
+      : Promise.resolve({ data: [{ id: currentUser.id, full_name: currentUser.name, first_name: currentUser.firstName, last_name: currentUser.lastName, phone: currentUser.phone, avatar_url: currentUser.avatarUrl, role: currentUser.role }], error: null });
     const entriesQuery = isAdmin
       ? supabase.from("time_entries").select("*").order("work_date", { ascending: false })
       : supabase.from("time_entries").select("*").eq("employee_id", currentUser.id).order("work_date", { ascending: false });
@@ -528,13 +508,9 @@ export default function RestorationHoursTracker() {
       name: profile.full_name || `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unnamed Employee",
       firstName: profile.first_name || "",
       lastName: profile.last_name || "",
-      email: profile.email || "",
       phone: profile.phone || "",
       avatarUrl: profile.avatar_url || "",
       role: profile.role || "employee",
-      approvalStatus: profile.approval_status || (profile.role === "admin" ? "approved" : "pending"),
-      approvedBy: profile.approved_by || null,
-      approvedAt: profile.approved_at || null,
     })));
     setEntries((entriesResponse.data || []).map(normalizeEntry));
     setMessages((messagesResponse.data || []).map((message) => ({
@@ -558,101 +534,6 @@ export default function RestorationHoursTracker() {
       setLoginError(error.message);
       setAuthLoading(false);
     }
-  }
-
-  async function handleSignup(e) {
-    e.preventDefault();
-    setLoginError("");
-    setSignupMessage("");
-
-    const firstName = signupForm.firstName.trim();
-    const lastName = signupForm.lastName.trim();
-    const email = signupForm.email.trim().toLowerCase();
-    const phone = signupForm.phone.trim();
-    const password = signupForm.password;
-
-    if (!firstName || !lastName || !email || !password) {
-      setLoginError("Please fill out first name, last name, email, and password.");
-      return;
-    }
-    if (password.length < 6) {
-      setLoginError("Password must be at least 6 characters.");
-      return;
-    }
-    if (password !== signupForm.confirmPassword) {
-      setLoginError("Passwords do not match.");
-      return;
-    }
-
-    setAuthLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-          full_name: `${firstName} ${lastName}`,
-          phone,
-          role: "employee",
-          approval_status: "pending",
-        },
-      },
-    });
-
-    if (error) {
-      setLoginError(error.message);
-      setAuthLoading(false);
-      return;
-    }
-
-    if (data.user) {
-      await supabase.from("profiles").upsert({
-        id: data.user.id,
-        first_name: firstName,
-        last_name: lastName,
-        full_name: `${firstName} ${lastName}`,
-        email,
-        phone: phone || null,
-        role: "employee",
-        approval_status: "pending",
-      });
-    }
-
-    await supabase.auth.signOut();
-    setSession(null);
-    setCurrentUser(null);
-    setSignupForm({ firstName: "", lastName: "", email: "", phone: "", password: "", confirmPassword: "" });
-    setSignupMessage("Your employee account request was submitted. An admin must approve it before you can access the portal.");
-    setAuthMode("login");
-    setAuthLoading(false);
-  }
-
-  async function approvePendingEmployee(employeeId) {
-    if (currentUser?.role !== "admin") return;
-    setAppError("");
-    const { error } = await supabase
-      .from("profiles")
-      .update({ approval_status: "approved", approved_by: currentUser.id, approved_at: new Date().toISOString() })
-      .eq("id", employeeId);
-    if (error) return setAppError(error.message);
-    const employee = employees.find((person) => person.id === employeeId);
-    if (employee) {
-      await createPortalMessage({ recipientId: employeeId, title: "Account approved", body: "Your VODA employee portal account has been approved. You can now access the portal." });
-    }
-    await loadAppData();
-  }
-
-  async function denyPendingEmployee(employeeId) {
-    if (currentUser?.role !== "admin") return;
-    const reason = window.prompt("Reason for denying this employee request? This is optional.") || "";
-    setAppError("");
-    const { error } = await supabase
-      .from("profiles")
-      .update({ approval_status: "denied", approved_by: currentUser.id, approved_at: new Date().toISOString(), denial_reason: reason || null })
-      .eq("id", employeeId);
-    if (error) return setAppError(error.message);
-    await loadAppData();
   }
 
   async function handleLogout() {
@@ -801,25 +682,34 @@ export default function RestorationHoursTracker() {
 
   function stopLiveShiftAndFillForm() {
     if (!liveShift) return;
+
     const endedAt = new Date();
     const startedAt = new Date(liveShift.startedAt);
-    setForm((current) => ({
-      ...current,
+    const reviewEntry = {
       date: formatDate(startedAt),
+      jobType: liveShift.jobType || form.jobType,
+      customerName: liveShift.customerName || form.customerName || "",
       start: startedAt.toTimeString().slice(0, 5),
       end: endedAt.toTimeString().slice(0, 5),
-      jobType: liveShift.jobType || current.jobType,
-      customerName: liveShift.customerName || current.customerName,
-    }));
+      lunchTaken: form.lunchTaken,
+      lunchMinutes: form.lunchTaken ? Number(form.lunchMinutes || 0) : 0,
+      notes: form.notes || "",
+      photoUrl: form.photoUrl || "",
+      employeeSignature: form.employeeSignature || "",
+    };
+
+    setStoppedShiftReview(reviewEntry);
+    setForm((current) => ({ ...current, ...reviewEntry }));
     setLiveShift(null);
   }
 
   function liveShiftElapsed() {
-    if (!liveShift?.startedAt) return "0:00";
+    if (!liveShift?.startedAt) return "0:00:00";
     const diff = Math.max(0, Math.floor((now.getTime() - new Date(liveShift.startedAt).getTime()) / 1000));
     const hours = Math.floor(diff / 3600);
     const minutes = Math.floor((diff % 3600) / 60);
-    return `${hours}:${String(minutes).padStart(2, "0")}`;
+    const seconds = diff % 60;
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
   async function uploadJobPhoto(file) {
@@ -883,15 +773,13 @@ export default function RestorationHoursTracker() {
       notes: form.notes,
       photo_url: form.photoUrl || null,
       employee_signature: form.employeeSignature || null,
-      gps_lat: form.gpsLat || null,
-      gps_lng: form.gpsLng || null,
       status: "pending",
       approval_status: "pending",
     };
 
     if (!navigator.onLine) {
       setOfflineQueue((current) => [...current, payload]);
-      setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "", gpsLat: "", gpsLng: "" });
+      setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
       setAppError("You are offline, so this entry was saved locally and will sync when the connection returns.");
       return;
     }
@@ -899,7 +787,61 @@ export default function RestorationHoursTracker() {
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) return setAppError(error.message);
     notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
-    setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "", gpsLat: "", gpsLng: "" });
+    setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+    await loadAppData();
+  }
+
+  async function submitRecordedShift() {
+    if (!currentUser || !stoppedShiftReview) return;
+    if (!stoppedShiftReview.customerName.trim()) {
+      setAppError("Please enter a job name or customer name before submitting the recorded shift.");
+      return;
+    }
+
+    setAppError("");
+
+    const payload = {
+      employee_id: currentUser.id,
+      job_type: stoppedShiftReview.jobType,
+      customer_name: stoppedShiftReview.customerName.trim(),
+      work_date: stoppedShiftReview.date,
+      start_time: stoppedShiftReview.start,
+      end_time: stoppedShiftReview.end,
+      lunch_taken: stoppedShiftReview.lunchTaken,
+      lunch_minutes: stoppedShiftReview.lunchTaken ? Number(stoppedShiftReview.lunchMinutes || 0) : 0,
+      notes: stoppedShiftReview.notes || "",
+      photo_url: stoppedShiftReview.photoUrl || null,
+      employee_signature: stoppedShiftReview.employeeSignature || null,
+      status: "pending",
+      approval_status: "pending",
+    };
+
+    if (!navigator.onLine) {
+      setOfflineQueue((current) => [...current, payload]);
+      setStoppedShiftReview(null);
+      setForm({
+        ...form,
+        customerName: "",
+        notes: "",
+        photoUrl: "",
+        employeeSignature: "",
+      });
+      setAppError("You are offline, so this recorded shift was saved locally and will sync when the connection returns.");
+      return;
+    }
+
+    const { error } = await supabase.from("time_entries").insert(payload);
+    if (error) return setAppError(error.message);
+
+    notifyUser("Recorded shift submitted", `${stoppedShiftReview.customerName.trim()} was added to your timesheet.`);
+    setStoppedShiftReview(null);
+    setForm({
+      ...form,
+      customerName: "",
+      notes: "",
+      photoUrl: "",
+      employeeSignature: "",
+    });
     await loadAppData();
   }
 
@@ -1042,7 +984,7 @@ export default function RestorationHoursTracker() {
       <div className="relative flex min-h-screen flex-col items-center justify-center gap-4 overflow-hidden bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_30%),radial-gradient(circle_at_bottom_right,#d9e2ea,transparent_34%),linear-gradient(135deg,#f4f6f7,#e9eef1_48%,#f7f8f8)] px-3 py-5 font-[Inter,ui-sans-serif,system-ui]">
         <div className="pointer-events-none absolute -left-28 top-20 h-64 w-64 rounded-full bg-cyan-300/18 blur-3xl" />
         <div className="pointer-events-none absolute -right-24 bottom-16 h-72 w-72 rounded-full bg-slate-500/12 blur-3xl" />
-        <motion.form {...softMotion} onSubmit={authMode === "signup" ? handleSignup : handleLogin} className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-white/55 bg-slate-100/70 p-6 shadow-2xl shadow-slate-950/10 backdrop-blur-2xl ring-1 ring-white/60 sm:p-7">
+        <motion.form {...softMotion} onSubmit={handleLogin} className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-white/55 bg-slate-100/70 p-6 shadow-2xl shadow-slate-950/10 backdrop-blur-2xl ring-1 ring-white/60 sm:p-7">
           <div className="mb-7 flex flex-col items-center text-center">
             <motion.div initial={{ opacity: 0, y: 10, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }} className="mb-5 flex h-24 w-24 items-center justify-center overflow-hidden rounded-[2rem] bg-slate-50/70 p-4 shadow-2xl shadow-slate-950/10 ring-1 ring-white/80 backdrop-blur-xl">
               <img src={iconLogo} alt="Voda icon" className="h-full w-full object-contain" />
@@ -1050,34 +992,13 @@ export default function RestorationHoursTracker() {
             <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-600">Voda Of Tucson Portal</p>
             <p className="mt-1 text-sm font-semibold text-slate-500">Secure employee timesheets</p>
           </div>
-          <h1 className="text-center text-3xl font-black tracking-[-0.04em] text-slate-950 sm:text-4xl">{authMode === "signup" ? "Request access." : "Welcome back."}</h1>
-          <p className="mx-auto mt-3 max-w-sm text-center text-sm leading-6 text-slate-500">
-            {authMode === "signup" ? "Create an employee request. An admin will approve your profile before you can use the portal." : "Track job hours, lunch breaks, and weekly payroll records in one calm mobile dashboard."}
-          </p>
+          <h1 className="text-center text-3xl font-black tracking-[-0.04em] text-slate-950 sm:text-4xl">Welcome back.</h1>
+          <p className="mx-auto mt-3 max-w-sm text-center text-sm leading-6 text-slate-500">Track job hours, lunch breaks, and weekly payroll records in one calm mobile dashboard.</p>
           <div className="mt-5 space-y-3">
-            {authMode === "signup" ? (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="First name" value={signupForm.firstName} onChange={(e) => setSignupForm({ ...signupForm, firstName: e.target.value })} className="input" required />
-                  <input type="text" placeholder="Last name" value={signupForm.lastName} onChange={(e) => setSignupForm({ ...signupForm, lastName: e.target.value })} className="input" required />
-                </div>
-                <input type="email" placeholder="Email" value={signupForm.email} onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })} className="input" required />
-                <input type="tel" placeholder="Phone number" value={signupForm.phone} onChange={(e) => setSignupForm({ ...signupForm, phone: e.target.value })} className="input" />
-                <input type="password" placeholder="Password" value={signupForm.password} onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })} className="input" required />
-                <input type="password" placeholder="Confirm password" value={signupForm.confirmPassword} onChange={(e) => setSignupForm({ ...signupForm, confirmPassword: e.target.value })} className="input" required />
-              </>
-            ) : (
-              <>
-                <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="input" required />
-                <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="input" required />
-              </>
-            )}
+            <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="input" required />
+            <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="input" required />
             {loginError && <p className="rounded-xl border border-red-300 bg-red-100 p-3 text-sm font-black text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">{loginError}</p>}
-            {signupMessage && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-black text-emerald-800 shadow-sm">{signupMessage}</p>}
-            <Button className="w-full py-4" disabled={authLoading}>{authMode === "signup" ? "Submit Access Request" : "Login"}</Button>
-            <button type="button" onClick={() => { setAuthMode(authMode === "signup" ? "login" : "signup"); setLoginError(""); setSignupMessage(""); }} className="w-full rounded-2xl py-2 text-sm font-black text-cyan-700 transition hover:bg-cyan-50">
-              {authMode === "signup" ? "Already approved? Back to login" : "New employee? Request access"}
-            </button>
+            <Button className="w-full py-4" disabled={authLoading}>Login</Button>
           </div>
         </motion.form>
 
@@ -1109,10 +1030,10 @@ export default function RestorationHoursTracker() {
   }
 
   return (
-    <div className={cx("relative min-h-screen overflow-hidden font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")}>
+    <div className={cx("relative min-h-dvh overflow-x-hidden font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")}>
       <div className="pointer-events-none fixed -left-28 top-20 h-80 w-80 rounded-full bg-cyan-300/14 blur-3xl" />
       <div className="pointer-events-none fixed -right-32 top-1/2 h-96 w-96 rounded-full bg-slate-600/12 blur-3xl" />
-      <div className="relative mx-auto max-w-7xl px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
+      <div className="relative mx-auto w-full max-w-[1540px] px-2 py-2 sm:px-4 sm:py-4 lg:px-5">
         <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex flex-col gap-3 rounded-[1.6rem] border border-white/55 bg-slate-100/72 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-cyan-700/10 ring-1 ring-white/80 sm:h-12 sm:w-12">
@@ -1140,8 +1061,6 @@ export default function RestorationHoursTracker() {
 
         <PortalMessages messages={messages} employees={employees} currentUser={currentUser} messageForm={messageForm} setMessageForm={setMessageForm} sendAdminMessage={sendAdminMessage} />
 
-        {currentUser.role === "admin" && <PendingEmployeeApprovals pendingProfiles={pendingProfiles} approvePendingEmployee={approvePendingEmployee} denyPendingEmployee={denyPendingEmployee} />}
-
         <CapabilityDock
           installPrompt={installPrompt}
           installApp={installApp}
@@ -1153,7 +1072,7 @@ export default function RestorationHoursTracker() {
           isAdmin={currentUser.role === "admin"}
         />
 
-        <main className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr] lg:gap-5">
+        <main className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="space-y-4 sm:space-y-5">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
               <MetricCard icon={<Clock />} label="Weekly Hours" value={moneylessHours(weeklyTotal)} />
@@ -1167,13 +1086,13 @@ export default function RestorationHoursTracker() {
                 <div className="relative overflow-hidden rounded-[2.25rem] bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.18),transparent_28%),linear-gradient(135deg,#111827,#1f2937_52%,#0f172a)]">
                   <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(255,255,255,.08),transparent_34%)]" />
 
-                  <div className="relative flex flex-col gap-5 border-b border-white/10 px-5 py-6 sm:px-7 sm:py-7 md:flex-row md:items-center md:justify-between">
+                  <div className="relative flex flex-col gap-5 border-b border-white/10 px-4 py-5 sm:px-6 sm:py-6 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0">
                       <div className="mb-2 flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.85)]" />
                         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">Week of</p>
                       </div>
-                      <h2 className="text-3xl font-black tracking-[-0.06em] text-white sm:text-5xl">{displayDate(weekStart)}</h2>
+                      <h2 className="text-2xl font-black tracking-[-0.06em] text-white sm:text-4xl">{displayDate(weekStart)}</h2>
                       <p className="mt-2 text-base font-extrabold tracking-[-0.03em] text-slate-300 sm:text-lg">Weekly Timesheet</p>
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
@@ -1186,7 +1105,7 @@ export default function RestorationHoursTracker() {
                     </div>
                   </div>
 
-                  <div className="relative p-4 sm:p-6">
+                  <div className="relative p-3 sm:p-5">
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
                       {weekDates.map((date, index) => {
                         const dateKey = formatDate(date);
@@ -1206,7 +1125,7 @@ export default function RestorationHoursTracker() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.03, ...spring }}
                             className={cx(
-                              "group relative min-h-[252px] rounded-[1.35rem] border p-3 text-center shadow-xl backdrop-blur-2xl transition duration-300 sm:min-h-[270px]",
+                              "group relative min-h-[224px] rounded-[1.25rem] border p-3 text-center shadow-xl backdrop-blur-2xl transition duration-300 sm:min-h-[242px]",
                               "border-white/15 bg-white/[0.075] hover:-translate-y-0.5 hover:bg-white/[0.105] hover:shadow-2xl hover:shadow-cyan-950/20",
                               isToday && "border-cyan-400/90 ring-2 ring-cyan-400/60"
                             )}
@@ -1224,7 +1143,7 @@ export default function RestorationHoursTracker() {
 
                             <div className="my-3 h-px w-full bg-white/12" />
 
-                            <div className="flex h-[72px] flex-col items-center justify-center sm:h-[78px]">
+                            <div className="flex h-[62px] flex-col items-center justify-center sm:h-[68px]">
                               <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-slate-950/25 shadow-inner shadow-slate-950/30 sm:h-10 sm:w-10">
                                 <Clock className="h-4 w-4 text-cyan-300" />
                               </div>
@@ -1232,9 +1151,9 @@ export default function RestorationHoursTracker() {
                               <p className="mt-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">Logged</p>
                             </div>
 
-                            <div className="mt-3 min-h-[70px]">
+                            <div className="mt-2 min-h-[60px]">
                               {dayEntries.length === 0 ? (
-                                <div className="flex min-h-[70px] flex-col items-center justify-center rounded-[1.1rem] border border-dashed border-white/18 bg-white/[0.035] px-2 text-slate-400">
+                                <div className="flex min-h-[60px] flex-col items-center justify-center rounded-[1.1rem] border border-dashed border-white/18 bg-white/[0.035] px-2 text-slate-400">
                                   <BriefcaseBusiness className="mb-1.5 h-4 w-4 opacity-75" />
                                   <p className="text-[10px] font-extrabold leading-tight">No entries</p>
                                 </div>
@@ -1358,7 +1277,6 @@ export default function RestorationHoursTracker() {
               elapsed={liveShiftElapsed()}
               startLiveShift={startLiveShift}
               stopLiveShiftAndFillForm={stopLiveShiftAndFillForm}
-              captureGpsLocation={captureGpsLocation}
               form={form}
             />
 
@@ -1378,7 +1296,6 @@ export default function RestorationHoursTracker() {
                   <Field label="Lunch Minutes"><input type="number" min="0" value={form.lunchMinutes} disabled={!form.lunchTaken} onChange={(e) => setForm({ ...form, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
                   <div className="md:col-span-2"><Field label="Notes"><textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input min-h-24 resize-none" placeholder="Add work notes, equipment used, or job progress..." /></Field></div>
                   <Field label="Photo / Job Documentation"><div className="space-y-2"><div className="relative"><Camera className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} className="input pl-11" placeholder="Paste photo/job folder link or upload below" /></div><input type="file" accept="image/*" onChange={(e) => uploadJobPhoto(e.target.files?.[0])} className="block w-full rounded-2xl border border-slate-200 bg-white/70 p-2 text-xs font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300" /></div></Field>
-                  <Field label="GPS Verification"><Button type="button" variant="outline" onClick={captureGpsLocation} className="w-full py-3"><MapPin className="mr-2 h-4 w-4" />{form.gpsLat && form.gpsLng ? `${form.gpsLat}, ${form.gpsLng}` : "Capture Location"}</Button></Field>
                   <div className="md:col-span-2"><Field label="Employee Signature / Confirmation"><div className="relative"><PenLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.employeeSignature} onChange={(e) => setForm({ ...form, employeeSignature: e.target.value })} className="input pl-11" placeholder="Type employee name to confirm this entry" /></div></Field></div>
                 </div>
                 <div className="mt-4 flex items-center justify-between rounded-3xl bg-gradient-to-br from-slate-900 to-slate-700 p-4 text-white shadow-xl shadow-slate-950/10 dark:from-slate-800 dark:to-cyan-950">
@@ -1434,7 +1351,7 @@ export default function RestorationHoursTracker() {
                       <div key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm transition duration-300 dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "border-slate-200 bg-slate-100/70 opacity-45 grayscale shadow-none dark:bg-white/5")}>
                         <div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-black">{entry.customerName}</p><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="text-xs text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
                         <EntryDetails entry={entry} employee={employee} />
-                        {(entry.photoUrl || entry.gpsLat || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.gpsLat && entry.gpsLng && <a className="flex items-center gap-2 text-cyan-700 underline dark:text-cyan-300" href={`https://www.google.com/maps?q=${entry.gpsLat},${entry.gpsLng}`} target="_blank" rel="noreferrer"><MapPin className="h-3.5 w-3.5" /> View GPS location</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
+                        {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
                         {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => setReviewModal({ entry, reason: "" })}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
                       </div>
                     );
@@ -1451,6 +1368,7 @@ export default function RestorationHoursTracker() {
       </div>
 
       {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} />}
+      {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
       {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={setReviewModal} />}
@@ -1465,12 +1383,11 @@ function CapabilityDock({ installPrompt, installApp, notificationPermission, req
   const items = [
     { icon: online ? <Wifi /> : <WifiOff />, label: online ? "Online" : "Offline", value: offlineQueue.length ? `${offlineQueue.length} queued` : "Synced", action: offlineQueue.length ? syncOfflineQueue : null },
     { icon: <Bell />, label: "Notifications", value: notificationPermission === "granted" ? "Enabled" : "Enable", action: notificationPermission !== "granted" && notificationPermission !== "unsupported" ? requestNotifications : null },
-    { icon: <Smartphone />, label: "iPhone App Feel", value: installPrompt ? "Install" : "Ready", action: installPrompt ? installApp : null },
     ...(isAdmin ? [{ icon: <FileText />, label: "Payroll PDF", value: "Export", action: exportPayrollPdf }] : []),
   ];
 
   return (
-    <motion.div {...softMotion} className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <motion.div {...softMotion} className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
       {items.map((item) => (
         <button key={item.label} type="button" onClick={item.action || undefined} className="group rounded-[1.4rem] border border-white/60 bg-white/65 p-3 text-left shadow-lg shadow-slate-950/5 ring-1 ring-white/60 transition hover:-translate-y-0.5 hover:bg-white/85 dark:border-white/10 dark:bg-white/7 dark:ring-white/10">
           <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-950 text-cyan-200 dark:bg-cyan-400/10 dark:text-cyan-200">{React.cloneElement(item.icon, { className: "h-4 w-4" })}</div>
@@ -1482,7 +1399,7 @@ function CapabilityDock({ installPrompt, installApp, notificationPermission, req
   );
 }
 
-function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFillForm, captureGpsLocation, form }) {
+function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFillForm, form }) {
   return (
     <Card className="overflow-hidden border-cyan-200/70 bg-gradient-to-br from-white/80 via-slate-50/70 to-cyan-50/50 dark:border-cyan-300/10 dark:from-slate-950/60 dark:via-slate-900/60 dark:to-cyan-950/30">
       <CardContent className="p-4 sm:p-5">
@@ -1494,11 +1411,10 @@ function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFi
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Live clock-in timer</p>
               <h2 className="text-xl font-black tracking-[-0.04em]">{liveShift ? elapsed : "Ready"}</h2>
-              <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{liveShift ? (liveShift.customerName || form.customerName || "Active job timer") : "Start a timer, stop it, then submit the prefilled hours."}</p>
+              <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{liveShift ? (liveShift.customerName || form.customerName || "Active job timer") : "Start a timer and it will keep running until you stop and review it."}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex">
-            <Button type="button" variant="outline" onClick={captureGpsLocation} className="gap-2"><MapPin className="h-4 w-4" /> GPS</Button>
+          <div className="grid grid-cols-1 gap-2 sm:flex">
             {!liveShift ? (
               <Button type="button" onClick={startLiveShift} className="gap-2"><Fingerprint className="h-4 w-4" /> Start</Button>
             ) : (
@@ -1508,6 +1424,50 @@ function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFi
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitRecordedShift }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
+      <motion.div
+        initial={{ opacity: 0, y: 22, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-[2rem] border border-white/60 bg-slate-50/95 p-5 shadow-2xl shadow-slate-950/25 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-950/95 sm:p-6"
+      >
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Recorded shift ready</p>
+            <h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">Submit recorded hours</h2>
+            <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Review the time captured by the live clock before sending it for admin approval.</p>
+          </div>
+          <Button variant="ghost" onClick={() => setStoppedShiftReview(null)}><X className="h-5 w-5" /></Button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Date"><input type="date" value={stoppedShiftReview.date} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, date: e.target.value })} className="input" /></Field>
+          <Field label="Job Type"><select value={stoppedShiftReview.jobType} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
+          <div className="sm:col-span-2"><Field label="Job / Customer Name"><input value={stoppedShiftReview.customerName} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, customerName: e.target.value })} className="input" placeholder="Example: Smith Residence" /></Field></div>
+          <Field label="Start Time"><input type="time" value={stoppedShiftReview.start} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, start: e.target.value })} className="input" /></Field>
+          <Field label="End Time"><input type="time" value={stoppedShiftReview.end} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, end: e.target.value })} className="input" /></Field>
+          <Field label="Lunch Break"><div className="flex gap-2"><Button type="button" variant={stoppedShiftReview.lunchTaken ? "cool" : "outline"} className="flex-1" onClick={() => setStoppedShiftReview({ ...stoppedShiftReview, lunchTaken: true })}>Yes</Button><Button type="button" variant={!stoppedShiftReview.lunchTaken ? "default" : "outline"} className="flex-1" onClick={() => setStoppedShiftReview({ ...stoppedShiftReview, lunchTaken: false, lunchMinutes: 0 })}>No</Button></div></Field>
+          <Field label="Lunch Minutes"><input type="number" min="0" value={stoppedShiftReview.lunchMinutes} disabled={!stoppedShiftReview.lunchTaken} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
+          <div className="sm:col-span-2"><Field label="Notes"><textarea value={stoppedShiftReview.notes} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, notes: e.target.value })} className="input min-h-28 resize-none" placeholder="Add work notes before submitting..." /></Field></div>
+          <div className="sm:col-span-2"><Field label="Employee Signature / Confirmation"><div className="relative"><PenLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={stoppedShiftReview.employeeSignature} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, employeeSignature: e.target.value })} className="input pl-11" placeholder="Type your name to confirm this recorded shift" /></div></Field></div>
+        </div>
+
+        <div className="mt-5 rounded-3xl bg-slate-900 p-4 text-white shadow-xl shadow-slate-950/10 dark:bg-white/10">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Recorded Total</p>
+          <p className="mt-1 text-3xl font-black tracking-[-0.04em]">{entryHours(stoppedShiftReview).toFixed(2)} hrs</p>
+          <p className="mt-1 text-xs font-bold text-slate-300">This will be submitted as pending until an admin approves it.</p>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <Button variant="outline" onClick={() => setStoppedShiftReview(null)} className="py-3">Cancel</Button>
+          <Button variant="cool" onClick={submitRecordedShift} className="py-3"><Send className="mr-2 h-4 w-4" /> Submit Hours</Button>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
@@ -1561,10 +1521,9 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
 
                 <EntryDetails entry={entry} employee={employee} />
 
-                {(entry.photoUrl || entry.gpsLat || entry.employeeSignature) && (
+                {(entry.photoUrl || entry.employeeSignature) && (
                   <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
                     {entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}
-                    {entry.gpsLat && entry.gpsLng && <a className="flex items-center gap-2 text-cyan-700 underline dark:text-cyan-300" href={`https://www.google.com/maps?q=${entry.gpsLat},${entry.gpsLng}`} target="_blank" rel="noreferrer"><MapPin className="h-3.5 w-3.5" /> View GPS location</a>}
                     {entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}
                   </div>
                 )}
@@ -1592,40 +1551,6 @@ function AvatarBadge({ person, size = "md" }) {
     <img src={person.avatarUrl} alt={person.name || "Profile"} className={cx(dims, "rounded-2xl object-cover shadow-sm ring-1 ring-white/70 dark:ring-white/10")} />
   ) : (
     <div className={cx(dims, "flex items-center justify-center rounded-2xl bg-cyan-50 font-black text-cyan-700 shadow-sm ring-1 ring-white/70 dark:bg-cyan-400/10 dark:text-cyan-200 dark:ring-white/10")}>{initials}</div>
-  );
-}
-
-function PendingEmployeeApprovals({ pendingProfiles, approvePendingEmployee, denyPendingEmployee }) {
-  if (!pendingProfiles.length) return null;
-
-  return (
-    <motion.div {...softMotion} className="mb-4 rounded-[1.6rem] border border-cyan-200/70 bg-cyan-50/75 p-4 shadow-xl shadow-cyan-950/8 backdrop-blur-2xl ring-1 ring-white/50 dark:border-cyan-300/15 dark:bg-cyan-400/10">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-200">Admin Approval Queue</p>
-          <h2 className="text-lg font-black tracking-[-0.03em] text-slate-950 dark:text-white">Pending employee requests</h2>
-        </div>
-        <span className="rounded-full bg-cyan-600 px-3 py-1 text-xs font-black text-white">{pendingProfiles.length}</span>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {pendingProfiles.map((employee) => (
-          <div key={employee.id} className="rounded-3xl border border-white/70 bg-white/72 p-4 shadow-sm dark:border-white/10 dark:bg-white/8">
-            <div className="mb-3 flex items-center gap-3">
-              <AvatarBadge person={employee} />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-black text-slate-950 dark:text-white">{employee.name}</p>
-                <p className="truncate text-xs font-bold text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
-                {employee.phone && <p className="truncate text-xs font-bold text-slate-500 dark:text-slate-400">{employee.phone}</p>}
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" variant="success" className="flex-1 gap-2" onClick={() => approvePendingEmployee(employee.id)}><CheckCircle2 className="h-4 w-4" /> Approve</Button>
-              <Button type="button" variant="danger" className="flex-1 gap-2" onClick={() => denyPendingEmployee(employee.id)}><X className="h-4 w-4" /> Deny</Button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </motion.div>
   );
 }
 
@@ -1810,4 +1735,19 @@ const inputStyles = `
   }
   .dark .input::placeholder { color: rgb(148 163 184); }
   .input option { color: rgb(15 23 42); }
+
+  html, body, #root {
+    width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
+  }
+  body {
+    margin: 0;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  * { box-sizing: border-box; }
+  @media (max-width: 430px) {
+    body { zoom: 0.94; }
+  }
 `;
