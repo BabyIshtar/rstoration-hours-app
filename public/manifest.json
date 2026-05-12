@@ -1,0 +1,25 @@
+{
+  "name": "Voda Of Tucson",
+  "short_name": "Voda Of Tucson",
+  "description": "Voda Of Tucson hours tracking app for field teams.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/VODA CIRCLE W DOTS PNG.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/VODA CIRCLE W DOTS PNG.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

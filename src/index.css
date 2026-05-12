@@ -1,7 +1,4 @@
 @import "tailwindcss";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html {
   width: 100%;
@@ -86,9 +83,6 @@ select {
     min-width: 0;
   }
 }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html, body, #root { width: 100%; min-height: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { margin: 0; overscroll-behavior: none; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -105,9 +99,6 @@ button:active { transform: scale(.985); }
 .dark .text-slate-500, .dark .text-slate-400, .dark .text-slate-300 { color: rgba(203,213,225,.82) !important; }
 .dark .text-slate-600, .dark .text-slate-700 { color: rgba(226,232,240,.88) !important; }
 @media (max-width: 768px) { .mobile-padding { padding-left: 14px !important; padding-right: 14px !important; } }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html,
 body,
@@ -370,9 +361,6 @@ button:active {
     min-width: 0;
   }
 }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html {
   width: 100%;

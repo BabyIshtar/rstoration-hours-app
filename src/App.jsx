@@ -222,6 +222,7 @@ function normalizeEntry(entry) {
   return {
     id: entry.id,
     employeeId: entry.employee_id,
+    jobId: entry.job_id || null,
     jobType: entry.job_type || "Other",
     customerName: entry.customer_name || "Unnamed Job",
     job: `${entry.job_type || "Other"} · ${entry.customer_name || "Unnamed Job"}`,
@@ -485,6 +486,7 @@ export default function RestorationHoursTracker() {
   const [inviteNote, setInviteNote] = useState("");
   const [form, setForm] = useState({
     date: formatDate(new Date()),
+    jobId: "",
     jobType: jobTypes[0],
     customerName: "",
     start: "08:00",
@@ -499,6 +501,10 @@ export default function RestorationHoursTracker() {
   });
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
+  const activeJobs = useMemo(() => {
+    const openStatuses = new Set(["active", "scheduled", "in progress", "on hold"]);
+    return jobs.filter((job) => openStatuses.has(String(job.status || "active").toLowerCase()));
+  }, [jobs]);
   const weekDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index)), [weekStart]);
   const historyCalendarDays = useMemo(() => getCalendarGridDates(historyMonth), [historyMonth]);
 
@@ -618,8 +624,8 @@ export default function RestorationHoursTracker() {
       ? supabase.from("portal_messages").select("*").order("created_at", { ascending: false }).limit(25)
       : supabase.from("portal_messages").select("*").or(`recipient_id.eq.${currentUser.id},recipient_id.is.null`).order("created_at", { ascending: false }).limit(12);
     const jobsQuery = isAdmin
-      ? supabase.from("app_jobs").select("*").order("created_at", { ascending: false }).limit(100)
-      : Promise.resolve({ data: [], error: null });
+      ? supabase.from("app_jobs").select("*").order("created_at", { ascending: false }).limit(150)
+      : supabase.from("app_jobs").select("*").or(`assigned_employee_id.eq.${currentUser.id},assigned_employee_id.is.null`).neq("status", "closed").order("created_at", { ascending: false }).limit(100);
 
     const [profilesResponse, entriesResponse, messagesResponse, jobsResponse] = await Promise.all([profilesQuery, entriesQuery, messagesQuery, jobsQuery]);
 
@@ -721,6 +727,16 @@ export default function RestorationHoursTracker() {
   const historyApprovedTotal = historyEntries.filter((entry) => entry.approvalStatus === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
   const selectedHistoryEmployeeName = selectedEmployeeId === "all" ? "All employees" : employeeById.get(selectedEmployeeId)?.name || "Selected employee";
 
+  function applyJobSelection(jobId, updater = setForm) {
+    const selectedJob = jobs.find((job) => job.id === jobId);
+    updater((current) => ({
+      ...current,
+      jobId,
+      jobType: selectedJob?.jobType || current.jobType,
+      customerName: selectedJob?.customerName || current.customerName,
+    }));
+  }
+
   async function saveProfile() {
     if (!currentUser) return;
     setAppError("");
@@ -805,6 +821,7 @@ export default function RestorationHoursTracker() {
     setLiveShift({
       startedAt: startedAt.toISOString(),
       date: formatDate(startedAt),
+      jobId: form.jobId || null,
       jobType: form.jobType,
       customerName: form.customerName || "",
     });
@@ -818,6 +835,7 @@ export default function RestorationHoursTracker() {
     const startedAt = new Date(liveShift.startedAt);
     const reviewEntry = {
       date: formatDate(startedAt),
+      jobId: liveShift.jobId || form.jobId || null,
       jobType: liveShift.jobType || form.jobType,
       customerName: liveShift.customerName || form.customerName || "",
       start: startedAt.toTimeString().slice(0, 5),
@@ -894,6 +912,7 @@ export default function RestorationHoursTracker() {
     setAppError("");
     const payload = {
       employee_id: currentUser.id,
+      job_id: form.jobId || null,
       job_type: form.jobType,
       customer_name: form.customerName.trim(),
       work_date: form.date,
@@ -910,7 +929,7 @@ export default function RestorationHoursTracker() {
 
     if (!navigator.onLine) {
       setOfflineQueue((current) => [...current, payload]);
-      setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+      setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
       setAppError("You are offline, so this entry was saved locally and will sync when the connection returns.");
       return;
     }
@@ -918,7 +937,7 @@ export default function RestorationHoursTracker() {
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) return setAppError(error.message);
     notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
-    setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+    setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
     await loadAppData();
   }
 
@@ -933,6 +952,7 @@ export default function RestorationHoursTracker() {
 
     const payload = {
       employee_id: currentUser.id,
+      job_id: stoppedShiftReview.jobId || null,
       job_type: stoppedShiftReview.jobType,
       customer_name: stoppedShiftReview.customerName.trim(),
       work_date: stoppedShiftReview.date,
@@ -952,6 +972,7 @@ export default function RestorationHoursTracker() {
       setStoppedShiftReview(null);
       setForm({
         ...form,
+        jobId: "",
         customerName: "",
         notes: "",
         photoUrl: "",
@@ -1481,6 +1502,7 @@ export default function RestorationHoursTracker() {
                 </div>
                 <div className="grid gap-2.5 md:grid-cols-2">
                   <Field label="Date"><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="input" /></Field>
+                  <Field label="Saved Job"><select value={form.jobId} onChange={(e) => applyJobSelection(e.target.value)} className="input"><option value="">Manual / one-time job</option>{activeJobs.map((job) => <option key={job.id} value={job.id}>{job.customerName}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</option>)}</select></Field>
                   <Field label="Job Type"><select value={form.jobType} onChange={(e) => setForm({ ...form, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
                   <Field label="Job / Customer Name"><input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} className="input" placeholder="Example: Smith Residence" /></Field>
                   <Field label="Start Time"><input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} className="input" /></Field>
@@ -1561,7 +1583,7 @@ export default function RestorationHoursTracker() {
       </div>
 
       {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} />}
-      {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} />}
+      {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} activeJobs={activeJobs} jobs={jobs} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
       {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={setReviewModal} />}
@@ -1620,7 +1642,16 @@ function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFi
   );
 }
 
-function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitRecordedShift }) {
+function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitRecordedShift, activeJobs = [], jobs = [] }) {
+  function applyRecordedJob(jobId) {
+    const selectedJob = jobs.find((job) => job.id === jobId);
+    setStoppedShiftReview((current) => ({
+      ...current,
+      jobId,
+      jobType: selectedJob?.jobType || current.jobType,
+      customerName: selectedJob?.customerName || current.customerName,
+    }));
+  }
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
       <motion.div
@@ -1639,8 +1670,9 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Date"><input type="date" value={stoppedShiftReview.date} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, date: e.target.value })} className="input" /></Field>
+          <Field label="Saved Job"><select value={stoppedShiftReview.jobId || ""} onChange={(e) => applyRecordedJob(e.target.value)} className="input"><option value="">Manual / one-time job</option>{activeJobs.map((job) => <option key={job.id} value={job.id}>{job.customerName}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</option>)}</select></Field>
           <Field label="Job Type"><select value={stoppedShiftReview.jobType} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
-          <div className="sm:col-span-2"><Field label="Job / Customer Name"><input value={stoppedShiftReview.customerName} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, customerName: e.target.value })} className="input" placeholder="Example: Smith Residence" /></Field></div>
+          <div><Field label="Job / Customer Name"><input value={stoppedShiftReview.customerName} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, customerName: e.target.value })} className="input" placeholder="Example: Smith Residence" /></Field></div>
           <Field label="Start Time"><input type="time" value={stoppedShiftReview.start} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, start: e.target.value })} className="input" /></Field>
           <Field label="End Time"><input type="time" value={stoppedShiftReview.end} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, end: e.target.value })} className="input" /></Field>
           <Field label="Lunch Break"><div className="flex gap-2"><Button type="button" variant={stoppedShiftReview.lunchTaken ? "cool" : "outline"} className="flex-1" onClick={() => setStoppedShiftReview({ ...stoppedShiftReview, lunchTaken: true })}>Yes</Button><Button type="button" variant={!stoppedShiftReview.lunchTaken ? "default" : "outline"} className="flex-1" onClick={() => setStoppedShiftReview({ ...stoppedShiftReview, lunchTaken: false, lunchMinutes: 0 })}>No</Button></div></Field>
