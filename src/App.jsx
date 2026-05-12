@@ -791,7 +791,7 @@ export default function RestorationHoursTracker() {
 
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) return setAppError(error.message);
-    notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
+    notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet and synced.`);
     setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
     await loadAppData();
   }
