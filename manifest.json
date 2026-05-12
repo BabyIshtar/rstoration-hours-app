@@ -8,14 +8,16 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/VODA CIRCLE W DOTS PNG.png",
+      "src": "/VODA-DOTS-ICON.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/VODA CIRCLE W DOTS PNG.png",
+      "src": "/VODA-DOTS-ICON.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
