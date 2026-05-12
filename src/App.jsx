@@ -53,6 +53,8 @@ const jobTypes = [
 const brandLogo = "/TUCSON VODA COLORED PNG 1600X1600.png";
 const iconLogo = "/VODA CIRCLE W DOTS PNG.png";
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const employeeRoles = ["admin", "manager", "tech", "employee"];
+const jobStatuses = ["active", "scheduled", "in progress", "on hold", "completed", "closed"];
 
 const loginTips = [
   { title: "Water Damage Tip", text: "Start drying within the first 24–48 hours whenever possible. Fast airflow and moisture checks help prevent hidden secondary damage." },
@@ -330,6 +332,117 @@ function EntryDetails({ entry, employee }) {
   );
 }
 
+function AdminControlCenter({
+  employees,
+  jobs,
+  inviteEmail,
+  setInviteEmail,
+  inviteNote,
+  createInviteDraft,
+  employeeDrafts,
+  updateEmployeeDraft,
+  saveEmployeeControls,
+  jobForm,
+  setJobForm,
+  createJobRecord,
+  updateJobStatus,
+}) {
+  return (
+    <Card>
+      <CardContent>
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Control Center</p>
+            <h2 className="text-xl font-black tracking-[-0.04em] sm:text-2xl">Employees & Jobs</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Manage hours access, roles, active employees, and job records from inside the app.</p>
+          </div>
+          <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-black text-cyan-700 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200">Feature Pack 1</div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[1fr_0.95fr]">
+          <div className="rounded-[1.5rem] border border-white/70 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-black tracking-[-0.03em]">Employee management</h3>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Set role, status, hourly rate, and approval access.</p>
+              </div>
+              <Users className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
+            </div>
+
+            <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input className="input" type="email" placeholder="employee@email.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+              <Button onClick={createInviteDraft} className="gap-2"><Plus className="h-4 w-4" /> Invite draft</Button>
+            </div>
+            {inviteNote && <p className="mb-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs font-bold text-cyan-800 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-100">{inviteNote}</p>}
+
+            <div className="space-y-3">
+              {employees.map((employee) => {
+                const draft = employeeDrafts[employee.id] || employee;
+                const isActive = draft.active !== false;
+                return (
+                  <div key={employee.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-950 dark:text-white">{employee.name}</p>
+                        <p className="truncate text-xs font-bold text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
+                      </div>
+                      <span className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]", isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200" : "bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400")}>{isActive ? "Active" : "Inactive"}</span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-4">
+                      <select className="input" value={draft.role || "employee"} onChange={(e) => updateEmployeeDraft(employee.id, { role: e.target.value })}>{employeeRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select>
+                      <select className="input" value={String(draft.active !== false)} onChange={(e) => updateEmployeeDraft(employee.id, { active: e.target.value === "true" })}><option value="true">Active</option><option value="false">Inactive</option></select>
+                      <input className="input" type="number" min="0" step="0.01" placeholder="Hourly rate" value={draft.hourlyRate ?? ""} onChange={(e) => updateEmployeeDraft(employee.id, { hourlyRate: e.target.value })} />
+                      <Button variant="outline" onClick={() => saveEmployeeControls(employee.id)} className="gap-2"><CheckCircle2 className="h-4 w-4" /> Save</Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-white/70 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-black tracking-[-0.03em]">Job database</h3>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Create permanent job records for hours tracking.</p>
+              </div>
+              <BriefcaseBusiness className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
+            </div>
+            <div className="grid gap-2">
+              <input className="input" placeholder="Customer / job name" value={jobForm.customerName} onChange={(e) => setJobForm((current) => ({ ...current, customerName: e.target.value }))} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input className="input" placeholder="Job number" value={jobForm.jobNumber} onChange={(e) => setJobForm((current) => ({ ...current, jobNumber: e.target.value }))} />
+                <select className="input" value={jobForm.jobType} onChange={(e) => setJobForm((current) => ({ ...current, jobType: e.target.value }))}>{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+              </div>
+              <input className="input" placeholder="Customer address" value={jobForm.address} onChange={(e) => setJobForm((current) => ({ ...current, address: e.target.value }))} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input className="input" placeholder="Insurance / carrier" value={jobForm.carrier} onChange={(e) => setJobForm((current) => ({ ...current, carrier: e.target.value }))} />
+                <input className="input" placeholder="Claim number" value={jobForm.claimNumber} onChange={(e) => setJobForm((current) => ({ ...current, claimNumber: e.target.value }))} />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <select className="input" value={jobForm.assignedEmployeeId} onChange={(e) => setJobForm((current) => ({ ...current, assignedEmployeeId: e.target.value }))}>
+                  <option value="">Unassigned</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                </select>
+                <Button onClick={createJobRecord} className="gap-2"><Plus className="h-4 w-4" /> Create job</Button>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {jobs.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm font-bold text-slate-400 dark:border-white/10 dark:text-slate-500">No jobs created yet.</div> : jobs.map((job) => (
+                <div key={job.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0"><p className="truncate text-sm font-black text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType} {job.jobNumber ? `• ${job.jobNumber}` : ""}</p>{job.address && <p className="mt-1 truncate text-xs font-semibold text-slate-400 dark:text-slate-500">{job.address}</p>}</div>
+                    <select className="input max-w-[150px]" value={job.status || "active"} onChange={(e) => updateJobStatus(job.id, e.target.value)}>{jobStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function RestorationHoursTracker() {
   const [session, setSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
@@ -363,6 +476,9 @@ export default function RestorationHoursTracker() {
   const [dayDetail, setDayDetail] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [employeeDrafts, setEmployeeDrafts] = useState({});
+  const [jobForm, setJobForm] = useState({ customerName: "", jobNumber: "", jobType: jobTypes[0], address: "", carrier: "", claimNumber: "", assignedEmployeeId: "" });
   const [messageForm, setMessageForm] = useState({ recipientId: "all", title: "", body: "" });
   const [profileForm, setProfileForm] = useState({ firstName: "", lastName: "", phone: "", avatarUrl: "" });
   const [inviteEmail, setInviteEmail] = useState("");
@@ -501,22 +617,31 @@ export default function RestorationHoursTracker() {
     const messagesQuery = isAdmin
       ? supabase.from("portal_messages").select("*").order("created_at", { ascending: false }).limit(25)
       : supabase.from("portal_messages").select("*").or(`recipient_id.eq.${currentUser.id},recipient_id.is.null`).order("created_at", { ascending: false }).limit(12);
+    const jobsQuery = isAdmin
+      ? supabase.from("app_jobs").select("*").order("created_at", { ascending: false }).limit(100)
+      : Promise.resolve({ data: [], error: null });
 
-    const [profilesResponse, entriesResponse, messagesResponse] = await Promise.all([profilesQuery, entriesQuery, messagesQuery]);
+    const [profilesResponse, entriesResponse, messagesResponse, jobsResponse] = await Promise.all([profilesQuery, entriesQuery, messagesQuery, jobsQuery]);
 
     if (profilesResponse.error) setAppError(profilesResponse.error.message);
     if (entriesResponse.error) setAppError(entriesResponse.error.message);
     if (messagesResponse.error && !String(messagesResponse.error.message || "").includes("portal_messages")) setAppError(messagesResponse.error.message);
+    if (jobsResponse.error && !String(jobsResponse.error.message || "").includes("app_jobs")) setAppError(jobsResponse.error.message);
 
-    setEmployees((profilesResponse.data || []).map((profile) => ({
+    const mappedEmployees = (profilesResponse.data || []).map((profile) => ({
       id: profile.id,
       name: profile.full_name || `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unnamed Employee",
       firstName: profile.first_name || "",
       lastName: profile.last_name || "",
       phone: profile.phone || "",
       avatarUrl: profile.avatar_url || "",
+      email: profile.email || "",
       role: profile.role || "employee",
-    })));
+      active: profile.active !== false,
+      hourlyRate: profile.hourly_rate ?? "",
+    }));
+    setEmployees(mappedEmployees);
+    setEmployeeDrafts(Object.fromEntries(mappedEmployees.map((employee) => [employee.id, employee])));
     setEntries((entriesResponse.data || []).map(normalizeEntry));
     setMessages((messagesResponse.data || []).map((message) => ({
       id: message.id,
@@ -527,6 +652,7 @@ export default function RestorationHoursTracker() {
       relatedEntryId: message.related_entry_id || null,
       createdAt: message.created_at,
     })));
+    setJobs((jobsResponse.data || []).map((job) => ({ id: job.id, customerName: job.customer_name || "Unnamed Job", jobNumber: job.job_number || "", jobType: job.job_type || "Other", address: job.address || "", carrier: job.carrier || "", claimNumber: job.claim_number || "", assignedEmployeeId: job.assigned_employee_id || "", status: job.status || "active", createdAt: job.created_at })));
     setAppLoading(false);
   }
 
@@ -791,7 +917,7 @@ export default function RestorationHoursTracker() {
 
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) return setAppError(error.message);
-    notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet and synced.`);
+    notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
     setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
     await loadAppData();
   }
@@ -974,14 +1100,58 @@ export default function RestorationHoursTracker() {
     URL.revokeObjectURL(url);
   }
 
+  function updateEmployeeDraft(employeeId, updates) {
+    setEmployeeDrafts((current) => ({ ...current, [employeeId]: { ...(current[employeeId] || {}), ...updates } }));
+  }
+
+  async function saveEmployeeControls(employeeId) {
+    if (currentUser?.role !== "admin") return;
+    const draft = employeeDrafts[employeeId];
+    if (!draft) return;
+    setAppError("");
+    const { error } = await supabase.from("profiles").update({
+      role: draft.role || "employee",
+      active: draft.active !== false,
+      approval_status: draft.active === false ? "inactive" : "approved",
+      hourly_rate: draft.hourlyRate === "" || draft.hourlyRate === null ? null : Number(draft.hourlyRate),
+    }).eq("id", employeeId);
+    if (error) return setAppError(error.message);
+    await loadAppData();
+  }
+
+  async function createJobRecord() {
+    if (currentUser?.role !== "admin") return;
+    if (!jobForm.customerName.trim()) return setAppError("Add a customer or job name before creating a job.");
+    setAppError("");
+    const { error } = await supabase.from("app_jobs").insert({ customer_name: jobForm.customerName.trim(), job_number: jobForm.jobNumber.trim() || null, job_type: jobForm.jobType, address: jobForm.address.trim() || null, carrier: jobForm.carrier.trim() || null, claim_number: jobForm.claimNumber.trim() || null, assigned_employee_id: jobForm.assignedEmployeeId || null, status: "active", created_by: currentUser.id });
+    if (error) return setAppError(error.message);
+    setJobForm({ customerName: "", jobNumber: "", jobType: jobTypes[0], address: "", carrier: "", claimNumber: "", assignedEmployeeId: "" });
+    await loadAppData();
+  }
+
+  async function updateJobStatus(jobId, status) {
+    if (currentUser?.role !== "admin") return;
+    setAppError("");
+    const { error } = await supabase.from("app_jobs").update({ status }).eq("id", jobId);
+    if (error) return setAppError(error.message);
+    setJobs((current) => current.map((job) => job.id === jobId ? { ...job, status } : job));
+  }
+
   function createInviteDraft() {
     if (!inviteEmail.trim()) return setInviteNote("Enter an employee email first.");
-    setInviteNote(`Invite prepared for ${inviteEmail.trim()}. Create this user in Supabase Auth, then add their profile row with role employee.`);
+    setInviteNote(`Invite prepared for ${inviteEmail.trim()}. Create this user in Supabase Auth, then add their profile row with role employee. This panel can manage their role/status once the profile exists.`);
     setInviteEmail("");
   }
 
   if (authLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-white">Loading account...</div>;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-slate-950 px-4 text-white">
+        <div className="flex h-28 w-28 items-center justify-center rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
+          <img src={iconLogo} alt="VODA Logo" className="h-full w-full object-contain" />
+        </div>
+        <div className="flex flex-col items-center"><div className="mb-3 h-2 w-2 animate-pulse rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.9)]" /><p className="text-sm font-black uppercase tracking-[0.25em] text-cyan-300">Loading Portal</p></div>
+      </div>
+    );
   }
 
   if (!session || !currentUser) {
@@ -1207,6 +1377,24 @@ export default function RestorationHoursTracker() {
                 </div>
               </CardContent>
             </Card>
+
+            {currentUser.role === "admin" && (
+              <AdminControlCenter
+                employees={employees}
+                jobs={jobs}
+                inviteEmail={inviteEmail}
+                setInviteEmail={setInviteEmail}
+                inviteNote={inviteNote}
+                createInviteDraft={createInviteDraft}
+                employeeDrafts={employeeDrafts}
+                updateEmployeeDraft={updateEmployeeDraft}
+                saveEmployeeControls={saveEmployeeControls}
+                jobForm={jobForm}
+                setJobForm={setJobForm}
+                createJobRecord={createJobRecord}
+                updateJobStatus={updateJobStatus}
+              />
+            )}
 
             {currentUser.role === "admin" && (
               <Card>
