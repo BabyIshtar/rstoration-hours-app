@@ -317,7 +317,7 @@ function Button({ children, className = "", variant = "default", size = "default
   return (
     <button
       className={cx(
-        "inline-flex max-w-full items-center justify-center overflow-hidden rounded-2xl font-bold tracking-[-0.01em] transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
+        "bubble-fit inline-flex max-w-full min-w-0 items-center justify-center overflow-hidden rounded-2xl text-center font-bold leading-tight tracking-[-0.01em] whitespace-normal transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
         variants[variant] || variants.default,
         sizes[size] || sizes.default,
         className
@@ -347,7 +347,7 @@ function StatusPill({ status }) {
     denied: "bg-red-100 text-red-800 border-red-300 shadow-sm dark:bg-red-500/20 dark:text-red-100 dark:border-red-300/20",
   };
 
-  return <span className={cx("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-black capitalize", styles[normalized] || styles.pending)}>{normalized}</span>;
+  return <span className={cx("bubble-fit inline-flex max-w-full min-w-0 items-center rounded-full border px-2.5 py-1 text-center text-[11px] font-black leading-tight capitalize sm:text-xs", styles[normalized] || styles.pending)}>{normalized}</span>;
 }
 
 function Field({ label, children }) {
@@ -391,9 +391,9 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
         {items.map((item) => {
           const selected = activeSection === item.id;
           return (
-            <button key={item.id} type="button" onClick={() => setActiveSection(item.id)} className={cx("flex min-h-[64px] flex-col items-center justify-center gap-1.5 rounded-[1.15rem] px-2 py-3 text-[11px] font-black uppercase tracking-[0.08em] transition-all duration-300 sm:min-h-[70px]", selected ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 dark:bg-white dark:text-slate-950" : "bg-white/55 text-slate-500 hover:bg-white hover:text-slate-950 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white")}>
+            <button key={item.id} type="button" onClick={() => setActiveSection(item.id)} className={cx("bubble-fit flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[1.15rem] px-2 py-3 text-center text-[10px] font-black uppercase leading-tight tracking-[0.06em] transition-all duration-300 sm:min-h-[70px] sm:text-[11px]", selected ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 dark:bg-white dark:text-slate-950" : "bg-white/55 text-slate-500 hover:bg-white hover:text-slate-950 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white")}>
               {React.cloneElement(item.icon, { className: "h-4 w-4" })}
-              <span>{item.label}</span>
+              <span className="max-w-full break-words leading-tight">{item.label}</span>
             </button>
           );
         })}
@@ -484,7 +484,7 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
                         {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
                         <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5 sm:grid-cols-3">
                           <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
-                          <Button size="sm" variant="danger" onClick={() => setReviewModal({ entry, reason: "" })}>Deny</Button>
+                          <Button size="sm" variant="danger" onClick={() => setReviewModal(entry)}>Deny</Button>
                           <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button>
                         </div>
                       </article>
@@ -1046,6 +1046,9 @@ export default function RestorationHoursTracker() {
       employeeSignature: form.employeeSignature || "",
     };
 
+    setReviewModal(null);
+    setEditModal(null);
+    setDayDetail(null);
     setStoppedShiftReview(reviewEntry);
     setForm((current) => ({ ...current, ...reviewEntry }));
     setLiveShift(null);
@@ -1212,6 +1215,26 @@ export default function RestorationHoursTracker() {
     await loadAppData();
   }
 
+  function closeTransientPanels() {
+    setStoppedShiftReview(null);
+    setReviewModal(null);
+    setEditModal(null);
+    setDayDetail(null);
+  }
+
+  function goToSection(section) {
+    closeTransientPanels();
+    setAppError("");
+    setActiveSection(section);
+  }
+
+  function openDenyModal(entry) {
+    setStoppedShiftReview(null);
+    setEditModal(null);
+    setDayDetail(null);
+    setReviewModal({ entry, reason: "" });
+  }
+
   async function captureGpsLocation() {
     setAppError("");
     if (!navigator.geolocation) return setAppError("GPS is not available on this device or browser.");
@@ -1245,11 +1268,14 @@ export default function RestorationHoursTracker() {
         relatedEntryId: id,
       });
     }
-    setReviewModal(null);
+    closeTransientPanels();
     await loadAppData();
   }
 
   function openEditModal(entry) {
+    setStoppedShiftReview(null);
+    setReviewModal(null);
+    setDayDetail(null);
     setEditModal({
       id: entry.id,
       employeeName: employeeById.get(entry.employeeId)?.name || currentUser?.name || "Employee",
@@ -1294,11 +1320,15 @@ export default function RestorationHoursTracker() {
         relatedEntryId: editModal.id,
       });
     }
-    setEditModal(null);
+    closeTransientPanels();
+    setActiveSection(currentUser?.role === "admin" ? "review" : "timesheets");
     await loadAppData();
   }
 
   function openDayDetail(dateValue, dayEntries = []) {
+    setStoppedShiftReview(null);
+    setReviewModal(null);
+    setEditModal(null);
     const dateKey = dateValue instanceof Date ? formatDate(dateValue) : String(dateValue);
     setDayDetail({
       date: dateKey,
@@ -1513,7 +1543,7 @@ export default function RestorationHoursTracker() {
 
         {appError && <div className="mb-5 rounded-3xl border border-red-300 bg-red-100 p-4 text-sm font-black text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">{appError}</div>}
 
-        <SectionNav activeSection={activeSection} setActiveSection={setActiveSection} isAdmin={currentUser.role === "admin"} />
+        <SectionNav activeSection={activeSection} setActiveSection={goToSection} isAdmin={currentUser.role === "admin"} />
 
         {activeSection === "updates" && <PortalMessages messages={messages} employees={employees} currentUser={currentUser} messageForm={messageForm} setMessageForm={setMessageForm} sendAdminMessage={sendAdminMessage} />}
 
@@ -1848,10 +1878,10 @@ export default function RestorationHoursTracker() {
               expandedApprovalGroups={expandedApprovalGroups}
               toggleApprovalGroup={toggleApprovalGroup}
               updateStatus={updateStatus}
-              setReviewModal={setReviewModal}
+              setReviewModal={openDenyModal}
               openEditModal={openEditModal}
               setSelectedEmployeeId={setSelectedEmployeeId}
-              setActiveSection={setActiveSection}
+              setActiveSection={goToSection}
               search={search}
               setSearch={setSearch}
             />}
@@ -1883,7 +1913,7 @@ export default function RestorationHoursTracker() {
                         <div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-black">{entry.customerName}</p><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="text-xs text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
                         <EntryDetails entry={entry} employee={employee} />
                         {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
-                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => setReviewModal({ entry, reason: "" })}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
+                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
                       </div>
                     );
                   })}
@@ -1902,7 +1932,7 @@ export default function RestorationHoursTracker() {
       {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} activeJobs={activeJobs} jobs={jobs} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
-      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={setReviewModal} />}
+      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={openDenyModal} />}
       <style>{inputStyles}</style>
     </div>
   );
@@ -2164,7 +2194,7 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
                 {currentUser?.role === "admin" && (
                   <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5">
                     <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
-                    <Button size="sm" variant="danger" onClick={() => setReviewModal({ entry, reason: "" })}>Deny</Button>
+                    <Button size="sm" variant="danger" onClick={() => setReviewModal(entry)}>Deny</Button>
                     <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button>
                   </div>
                 )}
@@ -2294,7 +2324,7 @@ function MiniStat({ label, value, tone }) {
     amber: "text-amber-700 dark:text-amber-200",
     red: "text-red-700 dark:text-red-200",
   };
-  return <div className="rounded-3xl bg-white/75 p-4 shadow-sm ring-1 ring-white/80 dark:bg-white/5 dark:ring-white/10"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{label}</p><p className={cx("mt-1 text-2xl font-black", tones[tone])}>{value}</p></div>;
+  return <div className="min-w-0 rounded-3xl bg-white/75 p-3 shadow-sm ring-1 ring-white/80 sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="break-words text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-slate-400 sm:text-xs">{label}</p><p className={cx("mt-1 break-words text-xl font-black leading-tight sm:text-2xl", tones[tone])}>{value}</p></div>;
 }
 
 function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError }) {
@@ -2439,6 +2469,30 @@ input,
 textarea,
 select {
   max-width: 100%;
+}
+
+.bubble-fit,
+.bubble-fit * {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.15;
+}
+
+.rounded-full,
+.rounded-2xl,
+.rounded-3xl,
+[class*="rounded-"] {
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .bubble-fit {
+    font-size: clamp(0.62rem, 2.7vw, 0.78rem);
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
+  }
 }
 
 @media (max-width: 768px) {
