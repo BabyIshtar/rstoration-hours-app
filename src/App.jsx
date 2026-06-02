@@ -109,14 +109,14 @@ const loginTips = [
   { title: "VODA Team Tip", text: "Small details create trust: clean photos, accurate hours, clear notes, and verified readings all tell the story." },
 ];
 
-const spring = { duration: 0.42, ease: [0.22, 1, 0.36, 1] };
+const spring = { duration: 0.54, ease: [0.22, 1, 0.36, 1] };
 
 const floatingAnimation = {
   animate: { y: [0, -3, 0] },
   transition: { duration: 5.5, repeat: Infinity, ease: "easeInOut" },
 };
 const softMotion = {
-  initial: { opacity: 0, y: 14, scale: 0.99 },
+  initial: { opacity: 0, y: 10, scale: 0.995 },
   animate: { opacity: 1, y: 0, scale: 1 },
   transition: spring,
 };
@@ -317,7 +317,7 @@ function Button({ children, className = "", variant = "default", size = "default
   return (
     <button
       className={cx(
-        "bubble-fit inline-flex max-w-full min-w-0 items-center justify-center overflow-hidden rounded-2xl text-center font-bold leading-tight tracking-[-0.01em] whitespace-normal transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
+        "bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-2xl text-center font-bold leading-none tracking-[-0.01em] whitespace-nowrap transition-all duration-500 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
         variants[variant] || variants.default,
         sizes[size] || sizes.default,
         className
@@ -330,7 +330,7 @@ function Button({ children, className = "", variant = "default", size = "default
 }
 
 function Card({ children, className = "" }) {
-  return <div className={cx("max-w-full overflow-hidden rounded-[1.6rem] border border-white/55 bg-white/74 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 transition-all duration-300 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
+  return <div className={cx("ios-glass max-w-full overflow-hidden rounded-[1.6rem] border border-white/65 bg-white/70 shadow-xl shadow-slate-950/10 backdrop-blur-2xl ring-1 ring-white/55 transition-all duration-500 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
 }
 
 function CardContent({ children, className = "" }) {
@@ -347,7 +347,7 @@ function StatusPill({ status }) {
     denied: "bg-red-100 text-red-800 border-red-300 shadow-sm dark:bg-red-500/20 dark:text-red-100 dark:border-red-300/20",
   };
 
-  return <span className={cx("bubble-fit inline-flex max-w-full min-w-0 items-center rounded-full border px-2.5 py-1 text-center text-[11px] font-black leading-tight capitalize sm:text-xs", styles[normalized] || styles.pending)}>{normalized}</span>;
+  return <span className={cx("bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center rounded-full border px-2.5 py-1 text-center text-[10px] font-black leading-none capitalize whitespace-nowrap sm:text-xs", styles[normalized] || styles.pending)}>{normalized}</span>;
 }
 
 function Field({ label, children }) {
@@ -391,9 +391,9 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
         {items.map((item) => {
           const selected = activeSection === item.id;
           return (
-            <button key={item.id} type="button" onClick={() => setActiveSection(item.id)} className={cx("bubble-fit flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[1.15rem] px-2 py-3 text-center text-[10px] font-black uppercase leading-tight tracking-[0.06em] transition-all duration-300 sm:min-h-[70px] sm:text-[11px]", selected ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 dark:bg-white dark:text-slate-950" : "bg-white/55 text-slate-500 hover:bg-white hover:text-slate-950 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white")}>
+            <button key={item.id} type="button" onClick={() => setActiveSection(item.id)} className={cx("bubble-fit flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[1.15rem] px-2 py-3 text-center text-[9.5px] font-black uppercase leading-none tracking-[0.04em] transition-all duration-500 sm:min-h-[70px] sm:text-[10.5px]", selected ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 dark:bg-white dark:text-slate-950" : "bg-white/55 text-slate-500 hover:bg-white hover:text-slate-950 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white")}>
               {React.cloneElement(item.icon, { className: "h-4 w-4" })}
-              <span className="max-w-full break-words leading-tight">{item.label}</span>
+              <span className="block max-w-full truncate leading-none">{item.label}</span>
             </button>
           );
         })}
@@ -1588,12 +1588,12 @@ export default function RestorationHoursTracker() {
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
 
-                    <div className="grid grid-cols-[54px_54px_1fr] gap-2 sm:flex sm:items-center sm:gap-3">
-                      <Button variant="outline" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))} className="h-14 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15"><ChevronLeft className="h-5 w-5" /></Button>
-                      <Button variant="outline" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, 7))} className="h-14 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15"><ChevronRight className="h-5 w-5" /></Button>
-                      <Button variant="cool" onClick={() => exportCsv(false)} className="h-14 gap-2 rounded-[1.25rem] px-5 text-base"><Download className="h-5 w-5" /> CSV</Button>
-                      <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-14 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-5 text-white hover:bg-white/15"><FileText className="h-5 w-5" /> Notes</Button>
-                      {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="h-14 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-5 text-white hover:bg-white/15"><FileText className="h-5 w-5" /> PDF</Button>}
+                    <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-3">
+                      <Button variant="outline" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronLeft className="h-5 w-5" /></Button>
+                      <Button variant="outline" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, 7))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronRight className="h-5 w-5" /></Button>
+                      <Button variant="cool" onClick={() => exportCsv(false)} className="h-12 gap-2 rounded-[1.25rem] px-4 text-sm sm:h-14 sm:px-5 sm:text-base"><Download className="h-5 w-5" /> CSV</Button>
+                      <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> Notes</Button>
+                      {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> PDF</Button>}
                     </div>
                   </div>
 
@@ -1613,24 +1613,24 @@ export default function RestorationHoursTracker() {
                             key={dateKey}
                             type="button"
                             onClick={() => openDayDetail(dateKey, dayEntries)}
-                            initial={{ opacity: 0, y: 14 }}
+                            initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.03, ...spring }}
                             className={cx(
-                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.25rem] border p-3 pt-9 text-center shadow-xl backdrop-blur-2xl transition-all duration-300 ease-out will-change-transform sm:min-h-[242px]",
+                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.35rem] border p-3 pt-10 text-center shadow-xl backdrop-blur-2xl transition-all duration-500 ease-out will-change-transform sm:min-h-[242px]",
                               "border-white/15 bg-white/[0.075] hover:-translate-y-0.5 hover:bg-white/[0.105] hover:shadow-2xl hover:shadow-cyan-950/20",
                               isToday && "border-cyan-400/90 ring-2 ring-cyan-400/60"
                             )}
                           >
                             {isToday && (
-                              <span className="absolute left-3 top-3 z-10 rounded-full border border-cyan-200/70 bg-cyan-400 px-3.5 py-1.5 text-[10px] font-black uppercase leading-none tracking-[0.12em] text-slate-950 shadow-lg shadow-cyan-500/25 sm:px-4">
+                              <span className="absolute left-3 top-3 z-10 inline-flex h-6 min-w-[58px] items-center justify-center rounded-full border border-cyan-200/70 bg-cyan-400 px-3 text-[9px] font-black uppercase leading-none tracking-[0.08em] text-slate-950 shadow-lg shadow-cyan-500/25 sm:h-7 sm:min-w-[64px] sm:text-[10px]">
                                 Today
                               </span>
                             )}
 
-                            <div className="flex min-h-[64px] flex-col items-start justify-start gap-1 text-left">
+                            <div className="flex min-h-[58px] flex-col items-start justify-start gap-1 text-left">
                               <p className="text-[13px] font-black leading-none tracking-[-0.025em] text-white sm:text-[14px]">{shortDay}</p>
-                              <p className="whitespace-normal break-words text-[10px] font-extrabold leading-[1.15] text-slate-400 sm:text-[10.5px]">{displayDate(date)}</p>
+                              <p className="max-w-full truncate whitespace-nowrap text-[10px] font-extrabold leading-none text-slate-400 sm:text-[10.5px]">{displayDate(date)}</p>
                             </div>
 
                             <div className="my-3 h-px w-full bg-white/12" />
