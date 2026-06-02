@@ -125,17 +125,51 @@ function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
+const APP_TIME_ZONE = "America/Phoenix";
+const PHOENIX_OFFSET = "-07:00";
+
+function phoenixDateKeyToDate(dateKey) {
+  return new Date(`${dateKey}T12:00:00${PHOENIX_OFFSET}`);
+}
+
+function getPhoenixParts(date, options = {}) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    ...options,
+  }).formatToParts(date);
+}
+
+function getPhoenixPart(date, type, options = {}) {
+  return getPhoenixParts(date, options).find((part) => part.type === type)?.value || "";
+}
+
 function getMonday(date = new Date()) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
+  const d = phoenixDateKeyToDate(formatDate(date));
+  const day = d.getUTCDay();
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+  d.setUTCDate(diff);
+  d.setUTCHours(19, 0, 0, 0);
   return d;
 }
 
-function formatDate(date) {
-  return date.toISOString().slice(0, 10);
+function formatDate(date = new Date()) {
+  const target = date instanceof Date ? date : phoenixDateKeyToDate(String(date));
+  const year = getPhoenixPart(target, "year", { year: "numeric", month: "2-digit", day: "2-digit" });
+  const month = getPhoenixPart(target, "month", { year: "numeric", month: "2-digit", day: "2-digit" });
+  const day = getPhoenixPart(target, "day", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return `${year}-${month}-${day}`;
+}
+
+function formatPhoenixTime(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parts.find((part) => part.type === "hour")?.value || "00";
+  const minute = parts.find((part) => part.type === "minute")?.value || "00";
+  return `${hour === "24" ? "00" : hour}:${minute}`;
 }
 
 function ordinalSuffix(day) {
@@ -149,39 +183,46 @@ function ordinalSuffix(day) {
 
 function displayDate(value) {
   if (!value) return "";
-  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`);
+  const date = value instanceof Date ? value : phoenixDateKeyToDate(String(value));
   if (Number.isNaN(date.getTime())) return String(value);
-  const month = date.toLocaleDateString(undefined, { month: "long" });
-  const day = date.getDate();
-  const year = date.getFullYear();
+  const month = getPhoenixPart(date, "month", { month: "long", day: "numeric", year: "numeric" });
+  const day = Number(getPhoenixPart(date, "day", { month: "long", day: "numeric", year: "numeric" }));
+  const year = getPhoenixPart(date, "year", { month: "long", day: "numeric", year: "numeric" });
   return `${month} ${day}${ordinalSuffix(day)}, ${year}`;
 }
 
 function displayShortDate(value) {
   if (!value) return "";
-  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`);
+  const date = value instanceof Date ? value : phoenixDateKeyToDate(String(value));
   if (Number.isNaN(date.getTime())) return String(value);
-  const month = date.toLocaleDateString(undefined, { month: "short" });
-  return `${month} ${date.getDate()}${ordinalSuffix(date.getDate())}`;
+  const month = getPhoenixPart(date, "month", { month: "short", day: "numeric" });
+  const day = Number(getPhoenixPart(date, "day", { month: "short", day: "numeric" }));
+  return `${month} ${day}${ordinalSuffix(day)}`;
 }
 
 
 function addDays(date, days) {
   const d = new Date(date);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 }
 
 function getMonthStart(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+  const target = date instanceof Date ? date : phoenixDateKeyToDate(String(date));
+  const year = Number(getPhoenixPart(target, "year", { year: "numeric", month: "2-digit", day: "2-digit" }));
+  const month = getPhoenixPart(target, "month", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return phoenixDateKeyToDate(`${year}-${month}-01`);
 }
 
 function addMonths(date, months) {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const target = date instanceof Date ? date : phoenixDateKeyToDate(String(date));
+  const year = Number(getPhoenixPart(target, "year", { year: "numeric", month: "2-digit", day: "2-digit" }));
+  const month = Number(getPhoenixPart(target, "month", { year: "numeric", month: "2-digit", day: "2-digit" }));
+  return new Date(Date.UTC(year, month - 1 + months, 1, 19, 0, 0, 0));
 }
 
 function monthLabel(date) {
-  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE, month: "long", year: "numeric" }).format(date);
 }
 
 function getCalendarGridDates(monthDate) {
@@ -745,7 +786,7 @@ export default function RestorationHoursTracker() {
   const historyEntries = useMemo(() => {
     if (currentUser?.role !== "admin") return [];
     return entries.filter((entry) => {
-      const entryDate = new Date(`${entry.date}T00:00:00`);
+      const entryDate = phoenixDateKeyToDate(entry.date);
       const sameMonth = entryDate.getFullYear() === historyMonth.getFullYear() && entryDate.getMonth() === historyMonth.getMonth();
       const correctEmployee = selectedEmployeeId === "all" || entry.employeeId === selectedEmployeeId;
       return sameMonth && correctEmployee;
@@ -854,7 +895,7 @@ export default function RestorationHoursTracker() {
       jobType: form.jobType,
       customerName: form.customerName || "",
     });
-    setForm((current) => ({ ...current, date: formatDate(startedAt), start: startedAt.toTimeString().slice(0, 5) }));
+    setForm((current) => ({ ...current, date: formatDate(startedAt), start: formatPhoenixTime(startedAt) }));
   }
 
   function stopLiveShiftAndFillForm() {
@@ -867,8 +908,8 @@ export default function RestorationHoursTracker() {
       jobId: liveShift.jobId || form.jobId || null,
       jobType: liveShift.jobType || form.jobType,
       customerName: liveShift.customerName || form.customerName || "",
-      start: startedAt.toTimeString().slice(0, 5),
-      end: endedAt.toTimeString().slice(0, 5),
+      start: formatPhoenixTime(startedAt),
+      end: formatPhoenixTime(endedAt),
       lunchTaken: form.lunchTaken,
       lunchMinutes: form.lunchTaken ? Number(form.lunchMinutes || 0) : 0,
       notes: form.notes || "",
@@ -1352,13 +1393,13 @@ export default function RestorationHoursTracker() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.03, ...spring }}
                             className={cx(
-                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.25rem] border p-3 text-center shadow-xl backdrop-blur-2xl transition-all duration-300 ease-out will-change-transform sm:min-h-[242px]",
+                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.25rem] border p-3 pt-9 text-center shadow-xl backdrop-blur-2xl transition-all duration-300 ease-out will-change-transform sm:min-h-[242px]",
                               "border-white/15 bg-white/[0.075] hover:-translate-y-0.5 hover:bg-white/[0.105] hover:shadow-2xl hover:shadow-cyan-950/20",
                               isToday && "border-cyan-400/90 ring-2 ring-cyan-400/60"
                             )}
                           >
                             {isToday && (
-                              <span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-cyan-400 px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-950 shadow-lg shadow-cyan-500/25">
+                              <span className="absolute left-3 top-3 z-10 rounded-full border border-cyan-200/70 bg-cyan-400 px-3.5 py-1.5 text-[10px] font-black uppercase leading-none tracking-[0.12em] text-slate-950 shadow-lg shadow-cyan-500/25 sm:px-4">
                                 Today
                               </span>
                             )}
@@ -1487,7 +1528,7 @@ export default function RestorationHoursTracker() {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="text-[13px] font-black leading-none text-slate-900 dark:text-white">{date.getDate()}</p>
-                              <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">{date.toLocaleDateString(undefined, { weekday: "short" })}</p>
+                              <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">{new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE, weekday: "short" }).format(date)}</p>
                             </div>
                             {dayEntries.length > 0 && <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,.55)]" />}
                           </div>
@@ -1854,7 +1895,7 @@ function PortalMessages({ messages, employees, currentUser, messageForm, setMess
               <div key={message.id} className="rounded-3xl border border-white/70 bg-white/75 p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
                 <p className="text-sm font-black">{message.title}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{message.body}</p>
-                <p className="mt-3 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{message.recipientId === "all" ? "All employees" : recipient?.name || "Employee"} · {message.createdAt ? new Date(message.createdAt).toLocaleDateString() : "New"}</p>
+                <p className="mt-3 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{message.recipientId === "all" ? "All employees" : recipient?.name || "Employee"} · {message.createdAt ? new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE }).format(new Date(message.createdAt)) : "New"}</p>
               </div>
             );
           })}
