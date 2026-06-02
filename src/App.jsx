@@ -317,6 +317,34 @@ function MetricCard({ icon, label, value }) {
   );
 }
 
+function SectionNav({ activeSection, setActiveSection, isAdmin }) {
+  const items = [
+    { id: "dashboard", label: "Home", icon: <Activity /> },
+    { id: "timesheets", label: "Timesheets", icon: <CalendarDays /> },
+    { id: "add", label: "Add Hours", icon: <Plus /> },
+    { id: "review", label: isAdmin ? "Review" : "Entries", icon: <CheckCircle2 /> },
+    ...(isAdmin ? [{ id: "manage", label: "Manage", icon: <Users /> }, { id: "history", label: "History", icon: <Clock /> }] : []),
+    { id: "updates", label: "Updates", icon: <MessageSquare /> },
+    { id: "tools", label: "Tools", icon: <Sparkles /> },
+  ];
+
+  return (
+    <motion.nav {...softMotion} className="mb-4 rounded-[1.6rem] border border-white/55 bg-slate-100/70 p-2 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/66 dark:ring-white/10">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+        {items.map((item) => {
+          const selected = activeSection === item.id;
+          return (
+            <button key={item.id} type="button" onClick={() => setActiveSection(item.id)} className={cx("flex min-h-[64px] flex-col items-center justify-center gap-1.5 rounded-[1.15rem] px-2 py-3 text-[11px] font-black uppercase tracking-[0.08em] transition-all duration-300 sm:min-h-[70px]", selected ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 dark:bg-white dark:text-slate-950" : "bg-white/55 text-slate-500 hover:bg-white hover:text-slate-950 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white")}>
+              {React.cloneElement(item.icon, { className: "h-4 w-4" })}
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </motion.nav>
+  );
+}
+
 function EntryDetails({ entry, employee }) {
   return (
     <div className="grid gap-2 rounded-2xl bg-slate-50/80 p-3 text-xs font-semibold text-slate-600 sm:grid-cols-2 dark:bg-white/5 dark:text-slate-300">
@@ -476,6 +504,7 @@ export default function RestorationHoursTracker() {
   const [editModal, setEditModal] = useState(null);
   const [dayDetail, setDayDetail] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("dashboard");
   const [messages, setMessages] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [employeeDrafts, setEmployeeDrafts] = useState({});
@@ -1255,9 +1284,11 @@ export default function RestorationHoursTracker() {
 
         {appError && <div className="mb-5 rounded-3xl border border-red-300 bg-red-100 p-4 text-sm font-black text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">{appError}</div>}
 
-        <PortalMessages messages={messages} employees={employees} currentUser={currentUser} messageForm={messageForm} setMessageForm={setMessageForm} sendAdminMessage={sendAdminMessage} />
+        <SectionNav activeSection={activeSection} setActiveSection={setActiveSection} isAdmin={currentUser.role === "admin"} />
 
-        <CapabilityDock
+        {activeSection === "updates" && <PortalMessages messages={messages} employees={employees} currentUser={currentUser} messageForm={messageForm} setMessageForm={setMessageForm} sendAdminMessage={sendAdminMessage} />}
+
+        {activeSection === "tools" && <CapabilityDock
           installPrompt={installPrompt}
           installApp={installApp}
           notificationPermission={notificationPermission}
@@ -1266,18 +1297,18 @@ export default function RestorationHoursTracker() {
           syncOfflineQueue={syncOfflineQueue}
           exportPayrollPdf={exportPayrollPdf}
           isAdmin={currentUser.role === "admin"}
-        />
+        />}
 
         <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
-            <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+            {activeSection === "dashboard" && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
               <MetricCard icon={<Clock />} label="Weekly Hours" value={moneylessHours(weeklyTotal)} />
               <MetricCard icon={<AlertCircle />} label="Pending" value={pendingCount} />
               <MetricCard icon={<CheckCircle2 />} label="Approved Payroll" value={moneylessHours(approvedPayrollTotal)} />
               <MetricCard icon={<ShieldCheck />} label="Denied Hours" value={moneylessHours(deniedHoursTotal)} />
-            </div>
+            </div>}
 
-            <Card className="overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/25 dark:border-white/10">
+            <Card className={cx("overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/25 dark:border-white/10", !["dashboard", "timesheets"].includes(activeSection) && "hidden")}>
               <CardContent className="p-0">
                 <div className="relative overflow-hidden rounded-[2.25rem] bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.18),transparent_28%),linear-gradient(135deg,#111827,#1f2937_52%,#0f172a)]">
                   <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(255,255,255,.08),transparent_34%)]" />
@@ -1399,7 +1430,7 @@ export default function RestorationHoursTracker() {
               </CardContent>
             </Card>
 
-            {currentUser.role === "admin" && (
+            {currentUser.role === "admin" && activeSection === "manage" && (
               <AdminControlCenter
                 employees={employees}
                 jobs={jobs}
@@ -1417,7 +1448,7 @@ export default function RestorationHoursTracker() {
               />
             )}
 
-            {currentUser.role === "admin" && (
+            {currentUser.role === "admin" && activeSection === "history" && (
               <Card>
                 <CardContent>
                   <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1486,15 +1517,15 @@ export default function RestorationHoursTracker() {
               </Card>
             )}
 
-            <LiveShiftPanel
+            {["dashboard", "add"].includes(activeSection) && <LiveShiftPanel
               liveShift={liveShift}
               elapsed={liveShiftElapsed()}
               startLiveShift={startLiveShift}
               stopLiveShiftAndFillForm={stopLiveShiftAndFillForm}
               form={form}
-            />
+            />}
 
-            <Card>
+            {activeSection === "add" && <Card>
               <CardContent>
                 <div className="mb-5 flex items-center gap-3">
                   <div className="rounded-2xl bg-cyan-50 p-3 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200"><Plus className="h-5 w-5" /></div>
@@ -1518,11 +1549,11 @@ export default function RestorationHoursTracker() {
                   <Button onClick={addEntry} variant="outline" className="bg-white px-5 py-4 text-slate-950 hover:bg-cyan-50" disabled={appLoading}>Add Hours</Button>
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
           </motion.section>
 
           <motion.aside {...softMotion} transition={{ ...spring, delay: 0.12 }} className="min-w-0 space-y-4 sm:space-y-5">
-            {currentUser.role === "admin" && (
+            {currentUser.role === "admin" && activeSection === "dashboard" && (
               <Card>
                 <CardContent>
                   <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Command Center</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">Payroll + Team Controls</h2></div><Sparkles className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
@@ -1540,7 +1571,7 @@ export default function RestorationHoursTracker() {
               </Card>
             )}
 
-            <Card>
+            {["dashboard", "review"].includes(activeSection) && <Card>
               <CardContent>
                 <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Transparency Log</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">All Visible Entries</h2></div><CalendarDays className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
                 <div className="mb-4 grid gap-3 md:grid-cols-2">
@@ -1573,11 +1604,11 @@ export default function RestorationHoursTracker() {
                   })}
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
 
-            <Card className="overflow-hidden border-slate-500/15 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-800 text-white shadow-2xl shadow-cyan-700/15">
+            {activeSection === "dashboard" && <Card className="overflow-hidden border-slate-500/15 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-800 text-white shadow-2xl shadow-cyan-700/15">
               <CardContent className="relative p-5"><div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-300/14 blur-2xl" /><img src={brandLogo} alt="Voda Of Tucson" className="mb-5 max-h-14 w-auto object-contain brightness-0 invert sm:max-h-16" /><BriefcaseBusiness className="mb-4 h-8 w-8 text-cyan-200" /><h2 className="text-xl font-black tracking-[-0.03em]">Built for Voda Of Tucson field teams.</h2><p className="mt-2 text-sm leading-6 text-cyan-50">Track daily hours by job, verify lunch breaks, and keep weekly payroll transparent between employees and management.</p></CardContent>
-            </Card>
+            </Card>}
           </motion.aside>
         </main>
       </div>
