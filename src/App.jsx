@@ -330,7 +330,7 @@ function Button({ children, className = "", variant = "default", size = "default
 }
 
 function Card({ children, className = "" }) {
-  return <div className={cx("max-w-full overflow-hidden rounded-[1.6rem] border border-white/55 bg-slate-100/64 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 transition-all duration-300 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
+  return <div className={cx("max-w-full overflow-hidden rounded-[1.6rem] border border-white/55 bg-white/74 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 transition-all duration-300 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
 }
 
 function CardContent({ children, className = "" }) {
@@ -386,7 +386,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
   ];
 
   return (
-    <motion.nav {...softMotion} className="mb-4 rounded-[1.6rem] border border-white/55 bg-slate-100/70 p-2 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/66 dark:ring-white/10">
+    <motion.nav {...softMotion} className="mb-4 rounded-[1.6rem] border border-white/55 bg-white/72 p-2 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/66 dark:ring-white/10">
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-9">
         {items.map((item) => {
           const selected = activeSection === item.id;
@@ -415,6 +415,88 @@ function EntryDetails({ entry, employee }) {
         </p>
       )}
     </div>
+  );
+}
+
+
+function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleApprovalGroup, updateStatus, setReviewModal, openEditModal, setSelectedEmployeeId, setActiveSection, search, setSearch }) {
+  const pendingTotal = approvalGroups.reduce((sum, group) => sum + group.entries.length, 0);
+  const pendingHours = approvalGroups.reduce((sum, group) => sum + group.totalHours, 0);
+
+  return (
+    <Card>
+      <CardContent>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Approval Queue</p>
+            <h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">Hours Needing Approval</h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">Grouped by employee. Approved or denied hours leave this queue automatically, but remain available in Timesheets, History, and Docs.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:min-w-56">
+            <MiniStat label="Pending" value={pendingTotal} tone="amber" />
+            <MiniStat label="Hours" value={`${pendingHours.toFixed(2)}h`} tone="cyan" />
+          </div>
+        </div>
+
+        <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search pending approvals" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search pending jobs, notes, or employees..." /></div>
+          <Button type="button" variant="outline" onClick={() => { setSelectedEmployeeId("all"); setActiveSection("history"); }} className="min-h-12">Find Approved / History</Button>
+        </div>
+
+        <div className="space-y-3">
+          {approvalGroups.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-6 text-center dark:border-white/10 dark:bg-white/5">
+              <CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-emerald-600 dark:text-emerald-300" />
+              <p className="text-sm font-black text-slate-800 dark:text-white">No approvals needed right now.</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Approved entries can still be reviewed from History, Timesheets, or Docs.</p>
+            </div>
+          ) : approvalGroups.map(({ employee, entries, totalHours }) => {
+            const isOpen = expandedApprovalGroups[employee.id] !== false;
+            return (
+              <section key={employee.id} className="overflow-hidden rounded-[1.55rem] border border-slate-200 bg-white/82 shadow-lg shadow-slate-950/5 ring-1 ring-white/80 dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
+                <button type="button" onClick={() => toggleApprovalGroup(employee.id)} className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-slate-50 dark:hover:bg-white/5" aria-expanded={isOpen}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <AvatarBadge person={employee} />
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-black text-slate-950 dark:text-white">{employee.name}</h3>
+                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{entries.length} pending · {totalHours.toFixed(2)} hrs awaiting review</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 dark:border-amber-300/15 dark:bg-amber-400/10 dark:text-amber-200">{entries.length}</span>
+                    <ChevronRight className={cx("h-5 w-5 text-slate-400 transition-transform", isOpen && "rotate-90")} />
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="space-y-3 border-t border-slate-100 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-slate-950/20 sm:p-4">
+                    {entries.map((entry) => (
+                      <article key={entry.id} className="rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/35">
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-black text-slate-950 dark:text-white">{entry.customerName}</p>
+                            <p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p>
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p>
+                          </div>
+                          <StatusPill status={entry.approvalStatus} />
+                        </div>
+                        <EntryDetails entry={entry} employee={employee} />
+                        {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
+                        <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5 sm:grid-cols-3">
+                          <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
+                          <Button size="sm" variant="danger" onClick={() => setReviewModal({ entry, reason: "" })}>Deny</Button>
+                          <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -562,6 +644,7 @@ export default function RestorationHoursTracker() {
   const [dayDetail, setDayDetail] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [expandedApprovalGroups, setExpandedApprovalGroups] = useState({});
   const [messages, setMessages] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [employeeDrafts, setEmployeeDrafts] = useState({});
@@ -784,6 +867,23 @@ export default function RestorationHoursTracker() {
   const pendingCount = visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())).length;
   const approvedPayrollTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
   const deniedHoursTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "denied").reduce((sum, entry) => sum + entryHours(entry), 0);
+  const pendingApprovalEntries = useMemo(() => visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())), [visibleEntries]);
+  const approvalGroups = useMemo(() => {
+    if (currentUser?.role !== "admin") return [];
+    return employees
+      .map((employee) => {
+        const employeeEntries = pendingApprovalEntries
+          .filter((entry) => entry.employeeId === employee.id)
+          .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`));
+        return {
+          employee,
+          entries: employeeEntries,
+          totalHours: employeeEntries.reduce((sum, entry) => sum + entryHours(entry), 0),
+        };
+      })
+      .filter((group) => group.entries.length > 0);
+  }, [currentUser, employees, pendingApprovalEntries]);
+  const toggleApprovalGroup = (employeeId) => setExpandedApprovalGroups((current) => ({ ...current, [employeeId]: current[employeeId] === false ? true : false }));
   const weekOneEntries = visibleEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
   const weekTwoEntries = visibleEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
   const weekOneSummary = summarizePayroll(weekOneEntries);
@@ -1012,6 +1112,10 @@ export default function RestorationHoursTracker() {
       setAppError("Please enter a job name or customer name before adding hours.");
       return;
     }
+    if (!form.notes.trim()) {
+      setAppError("Please add job notes before submitting hours. Employees must explain what was completed for the day.");
+      return;
+    }
     setAppError("");
     const payload = {
       employee_id: currentUser.id,
@@ -1023,7 +1127,7 @@ export default function RestorationHoursTracker() {
       end_time: form.end,
       lunch_taken: form.lunchTaken,
       lunch_minutes: form.lunchTaken ? Number(form.lunchMinutes || 0) : 0,
-      notes: form.notes,
+      notes: form.notes.trim(),
       photo_url: form.photoUrl || null,
       employee_signature: form.employeeSignature || null,
       status: "pending",
@@ -1033,6 +1137,7 @@ export default function RestorationHoursTracker() {
     if (!navigator.onLine) {
       setOfflineQueue((current) => [...current, payload]);
       setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+      setActiveSection("timesheets");
       setAppError("You are offline, so this entry was saved locally and will sync when the connection returns.");
       return;
     }
@@ -1041,6 +1146,7 @@ export default function RestorationHoursTracker() {
     if (error) return setAppError(error.message);
     notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
     setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+    setActiveSection("timesheets");
     await loadAppData();
   }
 
@@ -1048,6 +1154,10 @@ export default function RestorationHoursTracker() {
     if (!currentUser || !stoppedShiftReview) return;
     if (!stoppedShiftReview.customerName.trim()) {
       setAppError("Please enter a job name or customer name before submitting the recorded shift.");
+      return;
+    }
+    if (!String(stoppedShiftReview.notes || "").trim()) {
+      setAppError("Please add job notes before submitting the recorded shift. Employees must explain what was completed for the day.");
       return;
     }
 
@@ -1063,7 +1173,7 @@ export default function RestorationHoursTracker() {
       end_time: stoppedShiftReview.end,
       lunch_taken: stoppedShiftReview.lunchTaken,
       lunch_minutes: stoppedShiftReview.lunchTaken ? Number(stoppedShiftReview.lunchMinutes || 0) : 0,
-      notes: stoppedShiftReview.notes || "",
+      notes: String(stoppedShiftReview.notes || "").trim(),
       photo_url: stoppedShiftReview.photoUrl || null,
       employee_signature: stoppedShiftReview.employeeSignature || null,
       status: "pending",
@@ -1081,6 +1191,7 @@ export default function RestorationHoursTracker() {
         photoUrl: "",
         employeeSignature: "",
       });
+      setActiveSection("timesheets");
       setAppError("You are offline, so this recorded shift was saved locally and will sync when the connection returns.");
       return;
     }
@@ -1097,6 +1208,7 @@ export default function RestorationHoursTracker() {
       photoUrl: "",
       employeeSignature: "",
     });
+    setActiveSection("timesheets");
     await loadAppData();
   }
 
@@ -1376,7 +1488,7 @@ export default function RestorationHoursTracker() {
       <div className="pointer-events-none fixed -left-28 top-20 h-80 w-80 rounded-full bg-cyan-300/14 blur-3xl" />
       <div className="pointer-events-none fixed -right-32 top-1/2 h-96 w-96 rounded-full bg-slate-600/12 blur-3xl" />
       <div className="relative mx-auto w-full max-w-[1540px] overflow-x-hidden px-3 py-3 sm:px-4 sm:py-4 lg:px-5 mobile-padding">
-        <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex max-w-full flex-col gap-3 overflow-hidden rounded-[1.6rem] border border-white/55 bg-slate-100/72 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
+        <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex max-w-full flex-col gap-3 overflow-hidden rounded-[1.6rem] border border-white/55 bg-white/74 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-cyan-700/10 ring-1 ring-white/80 sm:h-12 sm:w-12">
               <img src={iconLogo} alt="Voda icon" className="h-8 w-8 object-contain sm:h-9 sm:w-9" />
@@ -1681,13 +1793,13 @@ export default function RestorationHoursTracker() {
                   <Field label="End Time"><input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className="input" /></Field>
                   <Field label="Lunch Break"><div className="flex gap-2"><Button type="button" variant={form.lunchTaken ? "cool" : "outline"} className="flex-1" onClick={() => setForm({ ...form, lunchTaken: true })}>Yes</Button><Button type="button" variant={!form.lunchTaken ? "default" : "outline"} className="flex-1" onClick={() => setForm({ ...form, lunchTaken: false, lunchMinutes: 0 })}>No</Button></div></Field>
                   <Field label="Lunch Minutes"><input type="number" min="0" value={form.lunchMinutes} disabled={!form.lunchTaken} onChange={(e) => setForm({ ...form, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
-                  <div className="md:col-span-2"><Field label="Notes"><textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input min-h-24 resize-none" placeholder="Add work notes, equipment used, or job progress..." /></Field></div>
+                  <div className="md:col-span-2"><Field label="Job Notes Required"><textarea required aria-required="true" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input min-h-28 resize-none" placeholder="Required: explain what you completed on this job today, equipment used, progress, or next steps..." /></Field><p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">Notes are required before hours can be submitted.</p></div>
                   <Field label="Photo / Job Documentation"><div className="space-y-2"><div className="relative"><Camera className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} className="input pl-11" placeholder="Paste photo/job folder link or upload below" /></div><input type="file" accept="image/*" onChange={(e) => uploadJobPhoto(e.target.files?.[0])} className="block w-full rounded-2xl border border-slate-200 bg-white/70 p-2 text-xs font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300" /></div></Field>
                   <div className="md:col-span-2"><Field label="Employee Signature / Confirmation"><div className="relative"><PenLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.employeeSignature} onChange={(e) => setForm({ ...form, employeeSignature: e.target.value })} className="input pl-11" placeholder="Type employee name to confirm this entry" /></div></Field></div>
                 </div>
                 <div className="mt-4 flex items-center justify-between rounded-3xl bg-gradient-to-br from-slate-900 to-slate-700 p-4 text-white shadow-xl shadow-slate-950/10 dark:from-slate-800 dark:to-cyan-950">
                   <div><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Calculated Entry</p><p className="text-2xl font-black">{entryHours(form).toFixed(2)} hrs</p></div>
-                  <Button onClick={addEntry} variant="outline" className="bg-white px-5 py-4 text-slate-950 hover:bg-cyan-50" disabled={appLoading}>Add Hours</Button>
+                  <Button onClick={addEntry} variant="outline" className="bg-white px-5 py-4 text-slate-950 hover:bg-cyan-50" disabled={appLoading || !form.customerName.trim() || !form.notes.trim()}>Add Hours</Button>
                 </div>
               </CardContent>
             </Card>}
@@ -1731,7 +1843,20 @@ export default function RestorationHoursTracker() {
               openDayDetail={openDayDetail}
             />}
 
-            {["dashboard", "review"].includes(activeSection) && <Card>
+            {currentUser.role === "admin" && activeSection === "review" && <AdminApprovalQueue
+              approvalGroups={approvalGroups}
+              expandedApprovalGroups={expandedApprovalGroups}
+              toggleApprovalGroup={toggleApprovalGroup}
+              updateStatus={updateStatus}
+              setReviewModal={setReviewModal}
+              openEditModal={openEditModal}
+              setSelectedEmployeeId={setSelectedEmployeeId}
+              setActiveSection={setActiveSection}
+              search={search}
+              setSearch={setSearch}
+            />}
+
+            {(activeSection === "dashboard" || (activeSection === "review" && currentUser.role !== "admin")) && <Card>
               <CardContent>
                 <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Transparency Log</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">All Visible Entries</h2></div><CalendarDays className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
                 <div className="mb-4 grid gap-3 md:grid-cols-2">
@@ -1869,7 +1994,7 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
           <Field label="End Time"><input type="time" value={stoppedShiftReview.end} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, end: e.target.value })} className="input" /></Field>
           <Field label="Lunch Break"><div className="flex gap-2"><Button type="button" variant={stoppedShiftReview.lunchTaken ? "cool" : "outline"} className="flex-1" onClick={() => setStoppedShiftReview({ ...stoppedShiftReview, lunchTaken: true })}>Yes</Button><Button type="button" variant={!stoppedShiftReview.lunchTaken ? "default" : "outline"} className="flex-1" onClick={() => setStoppedShiftReview({ ...stoppedShiftReview, lunchTaken: false, lunchMinutes: 0 })}>No</Button></div></Field>
           <Field label="Lunch Minutes"><input type="number" min="0" value={stoppedShiftReview.lunchMinutes} disabled={!stoppedShiftReview.lunchTaken} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
-          <div className="sm:col-span-2"><Field label="Notes"><textarea value={stoppedShiftReview.notes} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, notes: e.target.value })} className="input min-h-28 resize-none" placeholder="Add work notes before submitting..." /></Field></div>
+          <div className="sm:col-span-2"><Field label="Job Notes Required"><textarea required aria-required="true" value={stoppedShiftReview.notes} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, notes: e.target.value })} className="input min-h-32 resize-none" placeholder="Required: explain what you completed on this job today before submitting..." /></Field><p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">Notes are required before this recorded shift can be submitted.</p></div>
           <div className="sm:col-span-2"><Field label="Employee Signature / Confirmation"><div className="relative"><PenLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={stoppedShiftReview.employeeSignature} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, employeeSignature: e.target.value })} className="input pl-11" placeholder="Type your name to confirm this recorded shift" /></div></Field></div>
         </div>
 
@@ -1881,7 +2006,7 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
 
         <div className="mt-5 grid grid-cols-2 gap-2">
           <Button variant="outline" onClick={() => setStoppedShiftReview(null)} className="py-3">Cancel</Button>
-          <Button variant="cool" onClick={submitRecordedShift} className="py-3"><Send className="mr-2 h-4 w-4" /> Submit Hours</Button>
+          <Button variant="cool" onClick={submitRecordedShift} className="py-3" disabled={!stoppedShiftReview.customerName.trim() || !String(stoppedShiftReview.notes || "").trim()}><Send className="mr-2 h-4 w-4" /> Submit Hours</Button>
         </div>
       </motion.div>
     </div>
@@ -2212,7 +2337,7 @@ const inputStyles = `
     width: 100%;
     border-radius: 1rem;
     border: 1px solid rgb(203 213 225 / .92);
-    background: rgba(248,250,252,.78);
+    background: rgba(255,255,255,.88);
     padding: .78rem .9rem;
     font-size: .875rem;
     font-weight: 700;
