@@ -255,6 +255,21 @@ function isDeniedEntry(entry) {
   return String(entry?.approvalStatus || entry?.status || "").toLowerCase() === "denied";
 }
 
+function isVacationEntry(entry) {
+  const text = `${entry?.jobType || ""} ${entry?.customerName || ""} ${entry?.notes || ""}`.toLowerCase();
+  return text.includes("vacation") || text.includes("pto") || text.includes("paid time off");
+}
+
+function summarizePayroll(entries = []) {
+  const activeEntries = entries.filter((entry) => !isDeniedEntry(entry));
+  const totalHours = activeEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+  const vacationHours = activeEntries.filter(isVacationEntry).reduce((sum, entry) => sum + entryHours(entry), 0);
+  const workedHours = Math.max(0, totalHours - vacationHours);
+  const regularHours = Math.min(40, workedHours);
+  const overtimeHours = Math.max(0, workedHours - 40);
+  return { totalHours, regularHours, overtimeHours, vacationHours };
+}
+
 const deniedEntryShell = "border-slate-200 bg-slate-200/55 opacity-35 grayscale shadow-none ring-slate-200/60 hover:opacity-45 dark:border-white/10 dark:bg-white/5 dark:ring-white/10";
 const deniedText = "text-slate-400 line-through decoration-slate-400/50 dark:text-slate-500";
 
@@ -362,6 +377,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
   const items = [
     { id: "dashboard", label: "Home", icon: <Activity /> },
     { id: "timesheets", label: "Timesheets", icon: <CalendarDays /> },
+    { id: "exports", label: "Docs", icon: <FileText /> },
     { id: "add", label: "Add Hours", icon: <Plus /> },
     { id: "review", label: isAdmin ? "Review" : "Entries", icon: <CheckCircle2 /> },
     ...(isAdmin ? [{ id: "manage", label: "Manage", icon: <Users /> }, { id: "history", label: "History", icon: <Clock /> }] : []),
@@ -371,7 +387,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
 
   return (
     <motion.nav {...softMotion} className="mb-4 rounded-[1.6rem] border border-white/55 bg-slate-100/70 p-2 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/66 dark:ring-white/10">
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-9">
         {items.map((item) => {
           const selected = activeSection === item.id;
           return (
@@ -392,7 +408,7 @@ function EntryDetails({ entry, employee }) {
       <p className="flex items-center gap-2"><UserRound className="h-3.5 w-3.5" /> {employee?.name || "Employee"}</p>
       <p className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> {entryHours(entry).toFixed(2)} total hrs</p>
       <p className="sm:col-span-2">Lunch: {entry.lunchTaken ? `${entry.lunchMinutes} min` : "No lunch break"}</p>
-      {entry.notes && <p className="sm:col-span-2">Notes: {entry.notes}</p>}
+      {entry.notes && <div className="sm:col-span-2 rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-white/10 dark:bg-slate-950/30"><p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Job Notes</p><p className="whitespace-pre-wrap break-words leading-5 text-slate-700 dark:text-slate-200">{entry.notes}</p></div>}
       {entry.approvalStatus === "denied" && entry.denialReason && (
         <p className="sm:col-span-2 rounded-2xl border border-red-300 bg-red-100 p-3 font-black text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">
           Denial reason: {entry.denialReason}
@@ -571,11 +587,14 @@ export default function RestorationHoursTracker() {
   });
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
+  const getEmployeeName = (employeeId) => employeeId === currentUser?.id ? currentUser?.name : employeeById.get(employeeId)?.name || "Unknown Employee";
   const activeJobs = useMemo(() => {
     const openStatuses = new Set(["active", "scheduled", "in progress", "on hold"]);
     return jobs.filter((job) => openStatuses.has(String(job.status || "active").toLowerCase()));
   }, [jobs]);
   const weekDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index)), [weekStart]);
+  const weekTwoDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index + 7)), [weekStart]);
+  const payPeriodDates = useMemo(() => [...weekDates, ...weekTwoDates], [weekDates, weekTwoDates]);
   const historyCalendarDays = useMemo(() => getCalendarGridDates(historyMonth), [historyMonth]);
 
   useEffect(() => {
@@ -754,17 +773,27 @@ export default function RestorationHoursTracker() {
     if (!currentUser) return [];
     const searchValue = search.toLowerCase().trim();
     return entries.filter((entry) => {
-      const inWeek = weekDates.some((date) => formatDate(date) === entry.date);
+      const inWeek = payPeriodDates.some((date) => formatDate(date) === entry.date);
       const correctUser = currentUser.role === "admin" ? selectedEmployeeId === "all" || entry.employeeId === selectedEmployeeId : entry.employeeId === currentUser.id;
       const matchesSearch = !searchValue || `${entry.jobType} ${entry.customerName} ${entry.notes}`.toLowerCase().includes(searchValue);
       return inWeek && correctUser && matchesSearch;
     });
-  }, [entries, weekDates, currentUser, selectedEmployeeId, search]);
+  }, [entries, payPeriodDates, currentUser, selectedEmployeeId, search]);
 
   const weeklyTotal = visibleEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
   const pendingCount = visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())).length;
   const approvedPayrollTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
   const deniedHoursTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "denied").reduce((sum, entry) => sum + entryHours(entry), 0);
+  const weekOneEntries = visibleEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+  const weekTwoEntries = visibleEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+  const weekOneSummary = summarizePayroll(weekOneEntries);
+  const weekTwoSummary = summarizePayroll(weekTwoEntries);
+  const payPeriodSummary = {
+    totalHours: weekOneSummary.totalHours + weekTwoSummary.totalHours,
+    regularHours: weekOneSummary.regularHours + weekTwoSummary.regularHours,
+    overtimeHours: weekOneSummary.overtimeHours + weekTwoSummary.overtimeHours,
+    vacationHours: weekOneSummary.vacationHours + weekTwoSummary.vacationHours,
+  };
 
   const employeeSummaries = useMemo(() => {
     if (currentUser?.role !== "admin") return [];
@@ -960,16 +989,20 @@ export default function RestorationHoursTracker() {
 
   function exportPayrollPdf() {
     const approved = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved");
-    const rows = approved.map((entry) => {
+    const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+    const renderRows = (weekEntries) => weekEntries.map((entry) => {
       const employee = employeeById.get(entry.employeeId)?.name || currentUser?.name || "Employee";
-      return `<tr><td>${employee}</td><td>${displayDate(entry.date)}</td><td>${entry.customerName}</td><td>${entry.start}–${entry.end}</td><td>${entryHours(entry).toFixed(2)}</td></tr>`;
+      return `<tr><td>${escapeHtml(employee)}</td><td>${escapeHtml(displayDate(entry.date))}</td><td>${escapeHtml(entry.customerName)}</td><td>${escapeHtml(entry.start)}–${escapeHtml(entry.end)}</td><td>${entryHours(entry).toFixed(2)}</td><td class="notes">${escapeHtml(entry.notes || "")}</td></tr>`;
     }).join("");
-    const html = `<!doctype html><html><head><title>VODA Payroll ${displayDate(weekStart)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:32px;color:#0f172a}h1{letter-spacing:-.04em}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{text-align:left;border-bottom:1px solid #e2e8f0;padding:12px;font-size:13px}.pill{display:inline-block;background:#ecfeff;color:#0e7490;border-radius:999px;padding:6px 12px;font-weight:800}</style></head><body><p class="pill">VODA Of Tucson</p><h1>Approved Payroll Report</h1><p>Week of ${displayDate(weekStart)} · Total approved hours: ${approved.reduce((sum, entry) => sum + entryHours(entry), 0).toFixed(2)}</p><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No approved entries for this week.</td></tr>'}</tbody></table></body></html>`;
+    const approvedWeekOne = approved.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const approvedWeekTwo = approved.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const approvedPeriodSummary = summarizePayroll(approved);
+    const html = `<!doctype html><html><head><title>VODA Payroll ${displayDate(weekStart)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:32px;color:#0f172a}h1{letter-spacing:-.04em;margin-bottom:8px}.pill{display:inline-block;background:#ecfeff;color:#0e7490;border-radius:999px;padding:6px 12px;font-weight:800}.summary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:22px 0}.box{border:1px solid #e2e8f0;border-radius:16px;padding:12px;background:#f8fafc}.box small{display:block;color:#64748b;font-weight:800;text-transform:uppercase;font-size:10px;letter-spacing:.12em}.box b{font-size:18px}h2{margin-top:28px}table{width:100%;border-collapse:collapse;margin-top:12px;table-layout:fixed}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #e2e8f0;padding:10px;font-size:12px}.notes{white-space:pre-wrap;word-break:break-word;width:30%}</style></head><body><p class="pill">VODA Of Tucson</p><h1>Approved Payroll Report</h1><p>Two-week pay period: ${displayDate(weekStart)} – ${displayDate(addDays(weekStart, 13))}</p><div class="summary"><div class="box"><small>Week 1</small><b>${summarizePayroll(approvedWeekOne).totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${summarizePayroll(approvedWeekTwo).totalHours.toFixed(2)}h</b></div><div class="box"><small>Period</small><b>${approvedPeriodSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${approvedPeriodSummary.regularHours.toFixed(2)}h</b></div><div class="box"><small>Overtime</small><b>${approvedPeriodSummary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${approvedPeriodSummary.vacationHours.toFixed(2)}h</b></div></div><h2>Week 1</h2><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead><tbody>${renderRows(approvedWeekOne) || '<tr><td colspan="6">No approved entries for Week 1.</td></tr>'}</tbody></table><h2>Week 2</h2><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead><tbody>${renderRows(approvedWeekTwo) || '<tr><td colspan="6">No approved entries for Week 2.</td></tr>'}</tbody></table></body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `voda-approved-payroll-${formatDate(weekStart)}.html`;
+    link.download = `voda-approved-payroll-pay-period-${formatDate(weekStart)}.html`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -1163,30 +1196,73 @@ export default function RestorationHoursTracker() {
 
   function exportCsv(onlyApproved = false) {
     const source = onlyApproved ? visibleEntries.filter((entry) => entry.approvalStatus === "approved") : visibleEntries;
-    const rows = [
-      ["Employee", "Date", "Job", "Start", "End", "Lunch Taken", "Lunch Minutes", "Hours", "Approval Status", "Denial Reason", "Notes"],
-      ...source.map((entry) => {
-        const employeeName = entry.employeeId === currentUser?.id ? currentUser?.name : employeeById.get(entry.employeeId)?.name;
-        return [
-          employeeName || "Unknown",
-          entry.date,
-          entry.job,
-          entry.start,
-          entry.end,
-          entry.lunchTaken ? "Yes" : "No",
-          entry.lunchMinutes,
-          entryHours(entry).toFixed(2),
-          entry.approvalStatus,
-          (entry.denialReason || "").replaceAll(",", " "),
-          (entry.notes || "").replaceAll(",", " "),
-        ];
-      }),
+    const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const makeRows = (label, weekEntries, summary) => [
+      [label],
+      ["Employee", "Date", "Job Type", "Job / Customer", "Start", "End", "Lunch Taken", "Lunch Minutes", "Hours", "Approval Status", "Denial Reason", "Photo / Documentation Link", "Employee Signature", "Full Job Notes"],
+      ...weekEntries.map((entry) => [
+        getEmployeeName(entry.employeeId),
+        displayDate(entry.date),
+        entry.jobType,
+        entry.customerName,
+        entry.start,
+        entry.end,
+        entry.lunchTaken ? "Yes" : "No",
+        entry.lunchMinutes,
+        entryHours(entry).toFixed(2),
+        entry.approvalStatus,
+        entry.denialReason || "",
+        entry.photoUrl || "",
+        entry.employeeSignature || "",
+        entry.notes || "",
+      ]),
+      [],
+      ["Summary", "Total Hours", summary.totalHours.toFixed(2), "Regular Hours", summary.regularHours.toFixed(2), "Overtime Hours", summary.overtimeHours.toFixed(2), "Vacation Hours", summary.vacationHours.toFixed(2)],
+      [],
     ];
-    const blob = new Blob([rows.map((row) => row.join(",")).join("\n")], { type: "text/csv" });
+    const weekOneSource = source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const weekTwoSource = source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const periodSummary = summarizePayroll(source);
+    const rows = [
+      ["VODA Of Tucson Two-Week Timesheet + Job Notes Export"],
+      [`Pay Period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))}`],
+      [`Generated in Phoenix time (${APP_TIME_ZONE})`],
+      [currentUser?.role === "admin" ? `Admin view: ${selectedEmployeeId === "all" ? "All employees" : getEmployeeName(selectedEmployeeId)}` : `Employee view: ${currentUser?.name}`],
+      ["Pay Period Summary", "Total Hours", periodSummary.totalHours.toFixed(2), "Regular Hours", periodSummary.regularHours.toFixed(2), "Overtime Hours", periodSummary.overtimeHours.toFixed(2), "Vacation Hours", periodSummary.vacationHours.toFixed(2)],
+      [],
+      ...makeRows(`Week 1: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, weekOneSource, summarizePayroll(weekOneSource)),
+      ...makeRows(`Week 2: ${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, weekTwoSource, summarizePayroll(weekTwoSource)),
+    ];
+    const blob = new Blob([rows.map((row) => row.map(csvCell).join(",")).join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${onlyApproved ? "approved-payroll" : "restoration-hours"}-${formatDate(weekStart)}.csv`;
+    link.download = `${onlyApproved ? "approved-payroll" : "voda-job-notes"}-pay-period-${formatDate(weekStart)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportDocumentationReport(onlyApproved = false) {
+    const source = onlyApproved ? visibleEntries.filter((entry) => entry.approvalStatus === "approved") : visibleEntries;
+    const weekOneSource = source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const weekTwoSource = source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const summary = summarizePayroll(source);
+    const renderEntryCard = (entry) => `
+      <article class="entry">
+        <div class="entry-head"><div><small>${escapeHtml(getEmployeeName(entry.employeeId))}</small><h3>${escapeHtml(entry.customerName)}</h3><p>${escapeHtml(entry.jobType)} • ${escapeHtml(displayDate(entry.date))} • ${escapeHtml(entry.start)}-${escapeHtml(entry.end)} • ${entryHours(entry).toFixed(2)} hrs</p></div><span class="status ${escapeHtml(String(entry.approvalStatus || "pending").toLowerCase())}">${escapeHtml(entry.approvalStatus || "pending")}</span></div>
+        <div class="meta"><span>Lunch: ${entry.lunchTaken ? `${escapeHtml(String(entry.lunchMinutes))} min` : "No"}</span><span>Signature: ${escapeHtml(entry.employeeSignature || "Not signed")}</span>${entry.denialReason ? `<span>Denial: ${escapeHtml(entry.denialReason)}</span>` : ""}</div>
+        ${entry.photoUrl ? `<p class="doc-link">Documentation link: ${escapeHtml(entry.photoUrl)}</p>` : ""}
+        <section class="notes"><small>Full Job Notes</small><p>${escapeHtml(entry.notes || "No notes submitted.")}</p></section>
+      </article>`;
+    const renderWeek = (title, entriesForWeek) => `<section class="week"><h2>${escapeHtml(title)}</h2>${entriesForWeek.length ? entriesForWeek.map(renderEntryCard).join("") : '<div class="empty">No entries for this week.</div>'}</section>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>VODA Job Documentation Export</title><style>
+      body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0;background:#f3f7f9;color:#0f172a;padding:28px}.shell{max-width:1120px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a,#164e63);color:white;border-radius:28px;padding:28px;box-shadow:0 22px 60px rgba(15,23,42,.18)}.pill{display:inline-block;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:7px 12px;font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}h1{margin:14px 0 8px;font-size:34px;letter-spacing:-.05em}.subtitle{color:#cffafe;font-weight:700}.summary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:18px 0}.box{background:white;border:1px solid #e2e8f0;border-radius:20px;padding:14px;box-shadow:0 8px 24px rgba(15,23,42,.06)}.box small,.notes small,.entry small{display:block;color:#64748b;font-weight:900;text-transform:uppercase;font-size:10px;letter-spacing:.14em}.box b{display:block;margin-top:5px;font-size:22px}.week{margin-top:22px}.week h2{letter-spacing:-.035em}.entry{break-inside:avoid;background:white;border:1px solid #dbeafe;border-radius:24px;padding:18px;margin:12px 0;box-shadow:0 12px 34px rgba(15,23,42,.07)}.entry-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.entry h3{margin:4px 0 4px;font-size:21px;letter-spacing:-.035em}.entry p{margin:0;color:#475569;font-weight:700}.status{border-radius:999px;padding:7px 10px;font-size:11px;text-transform:uppercase;font-weight:900;background:#fef3c7;color:#92400e}.status.approved{background:#dcfce7;color:#166534}.status.denied{background:#fee2e2;color:#991b1b}.meta{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.meta span,.doc-link{border-radius:14px;background:#f1f5f9;padding:8px 10px;color:#334155;font-size:12px;font-weight:800}.notes{margin-top:12px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:18px;padding:14px}.notes p{white-space:pre-wrap;word-break:break-word;overflow:visible;line-height:1.55;color:#0f172a}.empty{border:1px dashed #cbd5e1;border-radius:20px;padding:22px;text-align:center;color:#64748b;font-weight:800}@media print{body{background:white;padding:0}.hero,.entry,.box{box-shadow:none}.summary{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.entry-head{flex-direction:column}}
+    </style></head><body><main class="shell"><section class="hero"><span class="pill">VODA Of Tucson</span><h1>Job Documentation Export</h1><p class="subtitle">Two-week pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Phoenix time • ${currentUser?.role === "admin" ? (selectedEmployeeId === "all" ? "All employees" : escapeHtml(getEmployeeName(selectedEmployeeId))) : escapeHtml(currentUser?.name || "Employee")}</p></section><section class="summary"><div class="box"><small>Week 1</small><b>${summarizePayroll(weekOneSource).totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${summarizePayroll(weekTwoSource).totalHours.toFixed(2)}h</b></div><div class="box"><small>Period</small><b>${summary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${summary.regularHours.toFixed(2)}h</b></div><div class="box"><small>Overtime</small><b>${summary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${summary.vacationHours.toFixed(2)}h</b></div></section>${renderWeek(`Week 1: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, weekOneSource)}${renderWeek(`Week 2: ${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, weekTwoSource)}</main></body></html>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${onlyApproved ? "approved-" : ""}voda-job-documentation-${formatDate(weekStart)}.html`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -1337,15 +1413,20 @@ export default function RestorationHoursTracker() {
           offlineQueue={offlineQueue}
           syncOfflineQueue={syncOfflineQueue}
           exportPayrollPdf={exportPayrollPdf}
+          exportDocumentationReport={exportDocumentationReport}
           isAdmin={currentUser.role === "admin"}
         />}
 
         <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
             {activeSection === "dashboard" && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-              <MetricCard icon={<Clock />} label="Weekly Hours" value={moneylessHours(weeklyTotal)} />
+              <MetricCard icon={<Clock />} label="Pay Period Total" value={moneylessHours(payPeriodSummary.totalHours)} />
+              <MetricCard icon={<CheckCircle2 />} label="Regular Hours" value={moneylessHours(payPeriodSummary.regularHours)} />
+              <MetricCard icon={<Activity />} label="Overtime Hours" value={moneylessHours(payPeriodSummary.overtimeHours)} />
+              <MetricCard icon={<CalendarDays />} label="Vacation Hours" value={moneylessHours(payPeriodSummary.vacationHours)} />
+              <MetricCard icon={<Clock />} label="Week 1 Total" value={moneylessHours(weekOneSummary.totalHours)} />
+              <MetricCard icon={<Clock />} label="Week 2 Total" value={moneylessHours(weekTwoSummary.totalHours)} />
               <MetricCard icon={<AlertCircle />} label="Pending" value={pendingCount} />
-              <MetricCard icon={<CheckCircle2 />} label="Approved Payroll" value={moneylessHours(approvedPayrollTotal)} />
               <MetricCard icon={<ShieldCheck />} label="Denied Hours" value={moneylessHours(deniedHoursTotal)} />
             </div>}
 
@@ -1361,14 +1442,15 @@ export default function RestorationHoursTracker() {
                         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">Week of</p>
                       </div>
                       <h2 className="text-2xl font-black tracking-[-0.06em] text-white sm:text-4xl">{displayDate(weekStart)}</h2>
-                      <p className="mt-2 text-base font-extrabold tracking-[-0.03em] text-slate-300 sm:text-lg">Weekly Timesheet</p>
+                      <p className="mt-2 text-base font-extrabold tracking-[-0.03em] text-slate-300 sm:text-lg">Two-Week Timesheet</p>
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
 
                     <div className="grid grid-cols-[54px_54px_1fr] gap-2 sm:flex sm:items-center sm:gap-3">
                       <Button variant="outline" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))} className="h-14 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15"><ChevronLeft className="h-5 w-5" /></Button>
                       <Button variant="outline" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, 7))} className="h-14 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15"><ChevronRight className="h-5 w-5" /></Button>
-                      <Button variant="cool" onClick={() => exportCsv(false)} className="h-14 gap-2 rounded-[1.25rem] px-5 text-base"><Download className="h-5 w-5" /> Export</Button>
+                      <Button variant="cool" onClick={() => exportCsv(false)} className="h-14 gap-2 rounded-[1.25rem] px-5 text-base"><Download className="h-5 w-5" /> CSV</Button>
+                      <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-14 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-5 text-white hover:bg-white/15"><FileText className="h-5 w-5" /> Notes</Button>
                       {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="h-14 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-5 text-white hover:bg-white/15"><FileText className="h-5 w-5" /> PDF</Button>}
                     </div>
                   </div>
@@ -1462,9 +1544,27 @@ export default function RestorationHoursTracker() {
                     <div className="mt-5 flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-white/[0.06] px-5 py-4 text-slate-300">
                       <div className="flex items-center gap-3">
                         <span className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-300/30 text-cyan-300">i</span>
-                        <p className="text-sm font-bold sm:text-base">Click any day to view details, job entries, and time logs.</p>
+                        <p className="text-sm font-bold sm:text-base">Click any day to view details. The export keeps Week 1 and Week 2 separated on one worksheet.</p>
                       </div>
                       <ChevronRight className="hidden h-5 w-5 text-slate-400 sm:block" />
+                    </div>
+
+                    <div className="mt-4 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/[0.08] p-4 text-white">
+                      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">Payroll Summary</p>
+                          <h3 className="text-lg font-black tracking-[-0.03em]">Two-week pay period</h3>
+                        </div>
+                        <p className="text-xs font-bold text-slate-300">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                        <MiniStat label="Week 1" value={`${weekOneSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+                        <MiniStat label="Week 2" value={`${weekTwoSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+                        <MiniStat label="Period" value={`${payPeriodSummary.totalHours.toFixed(2)}h`} tone="emerald" />
+                        <MiniStat label="Regular" value={`${payPeriodSummary.regularHours.toFixed(2)}h`} tone="emerald" />
+                        <MiniStat label="Overtime" value={`${payPeriodSummary.overtimeHours.toFixed(2)}h`} tone="amber" />
+                        <MiniStat label="Vacation" value={`${payPeriodSummary.vacationHours.toFixed(2)}h`} tone="red" />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1612,6 +1712,25 @@ export default function RestorationHoursTracker() {
               </Card>
             )}
 
+            {activeSection === "exports" && <DocumentationExportPanel
+              currentUser={currentUser}
+              employees={employees}
+              visibleEntries={visibleEntries}
+              selectedEmployeeId={selectedEmployeeId}
+              setSelectedEmployeeId={setSelectedEmployeeId}
+              search={search}
+              setSearch={setSearch}
+              employeeById={employeeById}
+              weekStart={weekStart}
+              setWeekStart={setWeekStart}
+              weekDates={weekDates}
+              weekTwoDates={weekTwoDates}
+              exportCsv={exportCsv}
+              exportDocumentationReport={exportDocumentationReport}
+              exportPayrollPdf={exportPayrollPdf}
+              openDayDetail={openDayDetail}
+            />}
+
             {["dashboard", "review"].includes(activeSection) && <Card>
               <CardContent>
                 <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Transparency Log</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">All Visible Entries</h2></div><CalendarDays className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
@@ -1622,7 +1741,7 @@ export default function RestorationHoursTracker() {
 
                 {currentUser.role === "admin" && (
                   <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                    {employeeSummaries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm font-bold text-slate-500 sm:col-span-2 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No employee hours to review for this week.</div> : employeeSummaries.map((employee) => (
+                    {employeeSummaries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm font-bold text-slate-500 sm:col-span-2 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No employee hours to review for this pay period.</div> : employeeSummaries.map((employee) => (
                       <button key={employee.id} type="button" onClick={() => setSelectedEmployeeId(employee.id)} className="rounded-3xl border border-white/70 bg-white/75 p-4 text-left shadow-sm ring-1 ring-white/70 transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
                         <p className="text-sm font-black">{employee.name}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">Total: {employee.totalHours.toFixed(2)} hrs</p>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-black"><span className="rounded-2xl bg-amber-50 px-2 py-2 text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">{employee.pendingCount} pending</span><span className="rounded-2xl bg-emerald-50 px-2 py-2 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">{employee.approvedHours.toFixed(1)} approved</span><span className="rounded-2xl bg-red-100 px-2 py-2 text-red-800 shadow-sm dark:bg-red-500/20 dark:text-red-100">{employee.deniedHours.toFixed(1)} denied</span></div>
@@ -1632,7 +1751,7 @@ export default function RestorationHoursTracker() {
                 )}
 
                 <div className="space-y-3">
-                  {visibleEntries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No matching entries for this week.</div> : visibleEntries.map((entry) => {
+                  {visibleEntries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No matching entries for this pay period.</div> : visibleEntries.map((entry) => {
                     const employee = entry.employeeId === currentUser.id ? currentUser : employeeById.get(entry.employeeId);
                     return (
                       <div key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm transition duration-300 dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "border-slate-200 bg-slate-100/70 opacity-45 grayscale shadow-none dark:bg-white/5")}>
@@ -1665,11 +1784,12 @@ export default function RestorationHoursTracker() {
 }
 
 
-function CapabilityDock({ installPrompt, installApp, notificationPermission, requestNotifications, offlineQueue, syncOfflineQueue, exportPayrollPdf, isAdmin }) {
+function CapabilityDock({ installPrompt, installApp, notificationPermission, requestNotifications, offlineQueue, syncOfflineQueue, exportPayrollPdf, exportDocumentationReport, isAdmin }) {
   const online = typeof navigator === "undefined" ? true : navigator.onLine;
   const items = [
     { icon: online ? <Wifi /> : <WifiOff />, label: online ? "Online" : "Offline", value: offlineQueue.length ? `${offlineQueue.length} queued` : "Synced", action: offlineQueue.length ? syncOfflineQueue : null },
     { icon: <Bell />, label: "Notifications", value: notificationPermission === "granted" ? "Enabled" : "Enable", action: notificationPermission !== "granted" && notificationPermission !== "unsupported" ? requestNotifications : null },
+    { icon: <FileText />, label: "Job Notes", value: "Export", action: () => exportDocumentationReport(false) },
     ...(isAdmin ? [{ icon: <FileText />, label: "Payroll PDF", value: "Export", action: exportPayrollPdf }] : []),
   ];
 
@@ -1765,6 +1885,97 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
         </div>
       </motion.div>
     </div>
+  );
+}
+
+
+function DocumentationExportPanel({ currentUser, employees, visibleEntries, selectedEmployeeId, setSelectedEmployeeId, search, setSearch, employeeById, weekStart, setWeekStart, weekDates, weekTwoDates, exportCsv, exportDocumentationReport, exportPayrollPdf, openDayDetail }) {
+  const weekOneEntries = visibleEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+  const weekTwoEntries = visibleEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+  const periodSummary = summarizePayroll(visibleEntries);
+  const weekOneSummary = summarizePayroll(weekOneEntries);
+  const weekTwoSummary = summarizePayroll(weekTwoEntries);
+  const noteCount = visibleEntries.filter((entry) => String(entry.notes || "").trim()).length;
+  const documentationCount = visibleEntries.filter((entry) => entry.photoUrl || entry.employeeSignature || String(entry.notes || "").trim()).length;
+  const groupedDays = [...weekDates, ...weekTwoDates].map((date) => {
+    const dateKey = formatDate(date);
+    return { date, dateKey, entries: visibleEntries.filter((entry) => entry.date === dateKey) };
+  }).filter((group) => group.entries.length > 0);
+  const getName = (employeeId) => employeeId === currentUser?.id ? currentUser?.name : employeeById.get(employeeId)?.name || "Unknown Employee";
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-900 p-5 text-white sm:p-6">
+          <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-cyan-300/15 blur-3xl" />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Job documentation export</p>
+              <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">Clean two-week notes review</h2>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Full job notes stay expanded, Week 1 and Week 2 stay separated, and payroll totals are ready for admin review or employee records.</p>
+              <p className="mt-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-200">Phoenix time • {displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+              <Button variant="outline" onClick={() => setWeekStart(addDays(weekStart, -14))} className="border-white/15 bg-white/10 text-white hover:bg-white/15"><ChevronLeft className="mr-1 h-4 w-4" /> Prev</Button>
+              <Button variant="outline" onClick={() => setWeekStart(getMonday(new Date()))} className="border-white/15 bg-white/10 text-white hover:bg-white/15">Current</Button>
+              <Button variant="outline" onClick={() => setWeekStart(addDays(weekStart, 14))} className="border-white/15 bg-white/10 text-white hover:bg-white/15">Next <ChevronRight className="ml-1 h-4 w-4" /></Button>
+              <Button variant="cool" onClick={() => exportDocumentationReport(false)}><FileText className="mr-2 h-4 w-4" /> Export Notes</Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5 p-4 sm:p-5">
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto_auto]">
+            {currentUser.role === "admin" && <select aria-label="Filter documentation by employee" value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="input"><option value="all">All employees</option>{employees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>}
+            <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search job documentation" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search job, notes, employee..." /></div>
+            <Button variant="outline" onClick={() => exportCsv(false)} className="min-h-[48px]"><Download className="mr-2 h-4 w-4" /> CSV</Button>
+            {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Payroll PDF</Button>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-8">
+            <MiniStat label="Week 1" value={`${weekOneSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+            <MiniStat label="Week 2" value={`${weekTwoSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+            <MiniStat label="Period" value={`${periodSummary.totalHours.toFixed(2)}h`} tone="emerald" />
+            <MiniStat label="Regular" value={`${periodSummary.regularHours.toFixed(2)}h`} tone="emerald" />
+            <MiniStat label="Overtime" value={`${periodSummary.overtimeHours.toFixed(2)}h`} tone="amber" />
+            <MiniStat label="Vacation" value={`${periodSummary.vacationHours.toFixed(2)}h`} tone="red" />
+            <MiniStat label="Notes" value={noteCount} tone="cyan" />
+            <MiniStat label="Docs" value={documentationCount} tone="cyan" />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <DocumentationWeek title={`Week 1 • ${displayShortDate(weekStart)} – ${displayShortDate(addDays(weekStart, 6))}`} entries={weekOneEntries} getName={getName} openDayDetail={openDayDetail} />
+            <DocumentationWeek title={`Week 2 • ${displayShortDate(addDays(weekStart, 7))} – ${displayShortDate(addDays(weekStart, 13))}`} entries={weekTwoEntries} getName={getName} openDayDetail={openDayDetail} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DocumentationWeek({ title, entries, getName, openDayDetail }) {
+  return (
+    <section className="rounded-[1.65rem] border border-white/70 bg-white/72 p-4 shadow-sm ring-1 ring-white/70 dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">{title}</p><h3 className="text-lg font-black tracking-[-0.03em]">{entries.length} documented entries</h3></div>
+      </div>
+      <div className="space-y-3">
+        {entries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-white/60 p-6 text-center text-sm font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No entries found for this week.</div> : entries.map((entry) => (
+          <article key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "opacity-60 grayscale")}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0"><p className="text-sm font-black text-slate-950 dark:text-white">{entry.customerName}</p><p className="mt-0.5 text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType} · {getName(entry.employeeId)}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p></div>
+              <StatusPill status={entry.approvalStatus} />
+            </div>
+            <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
+              <p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Full Job Notes</p>
+              <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-700 dark:text-slate-200">{entry.notes || "No notes submitted."}</p>
+            </div>
+            {(entry.photoUrl || entry.employeeSignature || entry.denialReason) && <div className="mt-3 grid gap-2 text-xs font-bold text-slate-600 dark:text-slate-300">{entry.photoUrl && <a className="rounded-2xl bg-cyan-50 px-3 py-2 text-cyan-700 underline dark:bg-cyan-400/10 dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">Open photo/job documentation</a>}{entry.employeeSignature && <p className="rounded-2xl bg-slate-50 px-3 py-2 dark:bg-white/5">Signed: {entry.employeeSignature}</p>}{entry.denialReason && <p className="rounded-2xl bg-red-50 px-3 py-2 text-red-700 dark:bg-red-500/10 dark:text-red-100">Denied reason: {entry.denialReason}</p>}</div>}
+            <Button size="sm" variant="ghost" onClick={() => openDayDetail(entry.date, entries.filter((item) => item.date === entry.date))} className="mt-3 w-full">Open day details</Button>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
