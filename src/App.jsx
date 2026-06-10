@@ -352,7 +352,7 @@ function Button({ children, className = "", variant = "default", size = "default
   return (
     <button
       className={cx(
-        "bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-2xl text-center font-bold leading-tight tracking-[-0.01em] transition-all duration-500 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
+        "inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl text-center font-bold leading-snug tracking-[-0.01em] transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
         variants[variant] || variants.default,
         sizes[size] || sizes.default,
         className
@@ -365,11 +365,11 @@ function Button({ children, className = "", variant = "default", size = "default
 }
 
 function Card({ children, className = "", ...props }) {
-  return <div {...props} className={cx("ios-glass max-w-full overflow-hidden rounded-[1.6rem] border border-white/65 bg-white/70 shadow-xl shadow-slate-950/10 backdrop-blur-2xl ring-1 ring-white/55 transition-all duration-500 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
+  return <div {...props} className={cx("ios-glass max-w-full rounded-[1.6rem] border border-white/65 bg-white/70 shadow-xl shadow-slate-950/10 backdrop-blur-2xl ring-1 ring-white/55 transition-all duration-300 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
 }
 
 function CardContent({ children, className = "" }) {
-  return <div className={cx("max-w-full overflow-hidden p-4 sm:p-5", className)}>{children}</div>;
+  return <div className={cx("max-w-full p-4 sm:p-5", className)}>{children}</div>;
 }
 
 function StatusPill({ status }) {
@@ -382,7 +382,7 @@ function StatusPill({ status }) {
     denied: "bg-red-100 text-red-800 border-red-300 shadow-sm dark:bg-red-500/20 dark:text-red-100 dark:border-red-300/20",
   };
 
-  return <span className={cx("bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center rounded-full border px-2.5 py-1 text-center text-[10px] font-black leading-tight capitalize sm:text-xs", styles[normalized] || styles.pending)}>{normalized}</span>;
+  return <span className={cx("inline-flex shrink-0 items-center justify-center rounded-full border px-2.5 py-1 text-center text-[10px] font-black leading-none capitalize sm:text-xs", styles[normalized] || styles.pending)}>{normalized}</span>;
 }
 
 function Field({ label, children }) {
@@ -428,7 +428,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
           return (
             <button key={item.id} type="button" onClick={() => setActiveSection(item.id)} className={cx("bubble-fit flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[1.15rem] px-2 py-3 text-center text-[9.5px] font-black uppercase leading-none tracking-[0.04em] transition-all duration-500 sm:min-h-[70px] sm:text-[10.5px]", selected ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 dark:bg-white dark:text-slate-950" : "bg-white/55 text-slate-500 hover:bg-white hover:text-slate-950 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white")}>
               {React.cloneElement(item.icon, { className: "h-4 w-4" })}
-              <span className="block max-w-full text-balance leading-tight">{item.label}</span>
+              <span className="block max-w-full leading-snug">{item.label}</span>
             </button>
           );
         })}
@@ -493,7 +493,7 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
                   <div className="flex min-w-0 items-center gap-3">
                     <AvatarBadge person={employee} />
                     <div className="min-w-0">
-                      <h3 className="truncate text-sm font-black text-slate-950 dark:text-white">{employee.name}</h3>
+                      <h3 className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{employee.name}</h3>
                       <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{entries.length} pending · {totalHours.toFixed(2)} hrs awaiting review</p>
                     </div>
                   </div>
@@ -586,8 +586,8 @@ function AdminControlCenter({
                   <div key={employee.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-slate-950 dark:text-white">{employee.name}</p>
-                        <p className="truncate text-xs font-bold text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
+                        <p className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{employee.name}</p>
+                        <p className="clean-wrap text-xs font-bold leading-snug text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
                       </div>
                       <span className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]", isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200" : "bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400")}>{isActive ? "Active" : "Inactive"}</span>
                     </div>
@@ -633,7 +633,7 @@ function AdminControlCenter({
               {jobs.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm font-bold text-slate-400 dark:border-white/10 dark:text-slate-500">No jobs created yet.</div> : jobs.map((job) => (
                 <div key={job.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0"><p className="truncate text-sm font-black text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType} {job.jobNumber ? `• ${job.jobNumber}` : ""}</p>{job.address && <p className="mt-1 truncate text-xs font-semibold text-slate-400 dark:text-slate-500">{job.address}</p>}</div>
+                    <div className="min-w-0"><p className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType} {job.jobNumber ? `• ${job.jobNumber}` : ""}</p>{job.address && <p className="mt-1 truncate text-xs font-semibold text-slate-400 dark:text-slate-500">{job.address}</p>}</div>
                     <select className="input max-w-[150px]" value={job.status || "active"} onChange={(e) => updateJobStatus(job.id, e.target.value)}>{jobStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select>
                   </div>
                 </div>
@@ -1829,8 +1829,8 @@ export default function RestorationHoursTracker() {
                                     >
                                       <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                          <p className={cx("line-clamp-2 break-words text-[10px] font-black leading-tight tracking-[-0.02em] text-white", isDeniedEntry(entry) && "text-red-100")}>{entry.customerName}</p>
-                                          <p className="mt-0.5 break-words text-[9px] font-bold leading-tight text-slate-400">{entry.start}–{entry.end}</p>
+                                          <p className={cx("line-clamp-2 job-text text-[10.5px] font-black leading-snug tracking-[-0.02em] text-white", isDeniedEntry(entry) && "text-red-100")}>{entry.customerName}</p>
+                                          <p className="mt-0.5 job-text text-[9.5px] font-bold leading-snug text-slate-400">{entry.start}–{entry.end}</p>
                                         </div>
                                         <span className={cx("shrink-0 rounded-full bg-cyan-400/12 px-1.5 py-0.5 text-[9px] font-black text-cyan-200", isDeniedEntry(entry) && "bg-red-400/15 text-red-100")}>{isDeniedEntry(entry) ? "Denied" : `${entryHours(entry).toFixed(2)}h`}</span>
                                       </div>
@@ -2370,7 +2370,7 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
               <div key={entry.id} className={cx("rounded-3xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5", isDeniedEntry(entry) && "bg-slate-100/65 opacity-60 grayscale dark:bg-white/[0.035]")}> 
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-base font-black tracking-[-0.02em] text-slate-950 dark:text-white">{entry.customerName}</p>
+                    <p className="clean-wrap text-base font-black leading-snug tracking-[-0.02em] text-slate-950 dark:text-white">{entry.customerName}</p>
                     <p className="text-xs font-black uppercase tracking-[0.1em] text-cyan-700 dark:text-cyan-300">{entry.jobType}</p>
                     <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p>
                   </div>
@@ -2616,154 +2616,77 @@ const inputStyles = `
   }
   * { box-sizing: border-box; }
 
-/* Global viewport + mobile polish */
-html {
+/* Global viewport + professional responsive polish */
+html, body, #root {
   width: 100%;
   min-height: 100%;
   overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  touch-action: manipulation;
 }
-
 body {
-  width: 100%;
-  min-height: 100%;
   margin: 0;
-  overflow-x: hidden;
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
-#root {
-  width: 100%;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-img,
-svg,
-video,
-canvas {
-  max-width: 100%;
-}
-
-.card,
-.glass-card,
-.panel,
-.dashboard-card,
-.mobile-safe {
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
+*, *::before, *::after { box-sizing: border-box; }
+img, svg, video, canvas { max-width: 100%; height: auto; }
+button, input, textarea, select { max-width: 100%; font: inherit; }
+button svg, .button-icon { flex: 0 0 auto; }
+.min-w-0 { min-width: 0; }
 .input {
   width: 100%;
-  max-width: 100%;
-}
-
-button,
-input,
-textarea,
-select {
-  max-width: 100%;
-}
-
-.bubble-fit,
-.bubble-fit * {
   min-width: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  line-height: 1.15;
+  font-size: 16px;
+  line-height: 1.35;
 }
-
-.rounded-full,
-.rounded-2xl,
-.rounded-3xl,
-[class*="rounded-"] {
-  min-width: 0;
-}
-
 .ios-glass { transform: translateZ(0); }
-.ios-glass:hover { box-shadow: 0 24px 70px rgba(15, 23, 42, .12); }
-@supports (-webkit-touch-callout: none) { .ios-glass { -webkit-backdrop-filter: blur(22px); } }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; } }
-@media (max-width: 480px) {
-  .bubble-fit {
-    font-size: clamp(0.62rem, 2.7vw, 0.78rem);
-    padding-left: 0.55rem;
-    padding-right: 0.55rem;
-  }
+.ios-glass:hover { box-shadow: 0 22px 56px rgba(15, 23, 42, .12); }
+.clean-wrap,
+.entry-text,
+.job-text {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
 }
-
-@media (max-width: 768px) {
-  html,
-  body,
-  #root {
-    width: 100%;
-    max-width: 100%;
-    overflow-x: hidden;
-  }
-
-  .mobile-safe {
-    width: 100%;
-    max-width: 100%;
-    overflow-x: hidden;
-  }
-
-  .mobile-padding {
-    padding-left: 14px !important;
-    padding-right: 14px !important;
-  }
-
-  .grid {
-    min-width: 0;
-  }
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-
-  /* Goddard professional typography + wrapping patch */
-  :root {
-    --voda-text-wrap: pretty;
-  }
-  .text-balance { text-wrap: balance; }
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  p, h1, h2, h3, h4, h5, h6, span, div, button, label {
-    overflow-wrap: anywhere;
-  }
+h1, h2, h3 {
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+p { line-height: 1.45; }
+@supports (text-wrap: balance) {
   h1, h2, h3 { text-wrap: balance; }
-  p, label, button, .input { text-wrap: pretty; }
-  button, .bubble-fit, .bubble-fit * {
-    white-space: normal !important;
-    min-width: 0;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    word-break: normal;
-    hyphens: auto;
+}
+@supports (text-wrap: pretty) {
+  p, label { text-wrap: pretty; }
+}
+@supports (-webkit-touch-callout: none) {
+  .ios-glass { -webkit-backdrop-filter: blur(22px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
-  .bubble-fit svg, button svg {
-    flex: 0 0 auto;
+}
+@media (max-width: 768px) {
+  .mobile-padding {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
   }
-  .calendar-entry-row {
-    min-width: 0;
-  }
-  @media (max-width: 640px) {
-    h1 { font-size: clamp(1.45rem, 7vw, 2.15rem); line-height: .95; }
-    h2 { font-size: clamp(1.1rem, 5vw, 1.55rem); line-height: 1.05; }
-    .input { font-size: 16px; }
-    button { line-height: 1.12; }
-  }
-
+  .grid { min-width: 0; }
+  h1 { font-size: clamp(1.8rem, 8vw, 2.45rem); }
+  h2 { font-size: clamp(1.35rem, 5.6vw, 1.8rem); }
+  button { line-height: 1.2; }
+}
 `;
