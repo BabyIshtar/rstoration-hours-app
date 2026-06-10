@@ -1720,9 +1720,9 @@ export default function RestorationHoursTracker() {
                     <div className="min-w-0">
                       <div className="mb-2 flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.85)]" />
-                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">Week of</p>
+                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">Pay period</p>
                       </div>
-                      <h2 className="text-2xl font-black tracking-[-0.06em] text-white sm:text-4xl">{displayDate(weekStart)}</h2>
+                      <h2 className="text-2xl font-black tracking-[-0.06em] text-white sm:text-4xl">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
                       <p className="mt-2 text-base font-extrabold tracking-[-0.03em] text-slate-300 sm:text-lg">Two-Week Timesheet</p>
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
@@ -1737,8 +1737,14 @@ export default function RestorationHoursTracker() {
                   </div>
 
                   <div className="relative p-3 sm:p-5">
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-                      {weekDates.map((date, index) => {
+                    {[weekDates, weekTwoDates].map((datesForWeek, weekIndex) => (
+                      <div key={weekIndex} className={cx(weekIndex > 0 && "mt-5")}>
+                        <div className="mb-3 flex items-center justify-between rounded-[1.25rem] border border-white/10 bg-white/[0.055] px-4 py-3">
+                          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-200">Week {weekIndex + 1}</p>
+                          <p className="text-xs font-extrabold text-slate-300">{displayShortDate(datesForWeek[0])} – {displayShortDate(datesForWeek[6])}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+                      {datesForWeek.map((date, index) => {
                         const dateKey = formatDate(date);
                         const dayEntries = visibleEntries.filter((entry) => entry.date === dateKey);
                         const activeEntries = dayEntries.filter((entry) => !isDeniedEntry(entry));
@@ -1820,7 +1826,9 @@ export default function RestorationHoursTracker() {
                           </motion.button>
                         );
                       })}
-                    </div>
+                        </div>
+                      </div>
+                    ))}
 
                     <div className="mt-5 flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-white/[0.06] px-5 py-4 text-slate-300">
                       <div className="flex items-center gap-3">
