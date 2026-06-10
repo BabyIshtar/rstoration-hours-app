@@ -109,15 +109,23 @@ const loginTips = [
   { title: "VODA Team Tip", text: "Small details create trust: clean photos, accurate hours, clear notes, and verified readings all tell the story." },
 ];
 
+<<<<<<< HEAD
 const spring = { duration: 0.42, ease: [0.22, 1, 0.36, 1] };
 const smoothSpring = { type: "spring", stiffness: 170, damping: 24, mass: 0.75 };
+=======
+const spring = { duration: 0.54, ease: [0.22, 1, 0.36, 1] };
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
 
 const floatingAnimation = {
   animate: { y: [0, -3, 0] },
   transition: { duration: 5.5, repeat: Infinity, ease: "easeInOut" },
 };
 const softMotion = {
+<<<<<<< HEAD
   initial: { opacity: 0, y: 14, scale: 0.985 },
+=======
+  initial: { opacity: 0, y: 10, scale: 0.995 },
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
   animate: { opacity: 1, y: 0, scale: 1 },
   transition: smoothSpring,
 };
@@ -153,6 +161,7 @@ function getMonday(date = new Date()) {
   return d;
 }
 
+<<<<<<< HEAD
 function getPayPeriodStart(date = new Date()) {
   const anchor = phoenixDateKeyToDate("2026-06-01");
   const monday = getMonday(date);
@@ -178,6 +187,8 @@ function getWeeklyJobSuggestions(entries = [], selectedDate, currentUser, select
   return [...new Set(names)].sort((a, b) => a.localeCompare(b));
 }
 
+=======
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
 function formatDate(date = new Date()) {
   const target = date instanceof Date ? date : phoenixDateKeyToDate(String(date));
   const year = getPhoenixPart(target, "year", { year: "numeric", month: "2-digit", day: "2-digit" });
@@ -355,8 +366,13 @@ function Button({ children, className = "", variant = "default", size = "default
   );
 }
 
+<<<<<<< HEAD
 function Card({ children, className = "", ...props }) {
   return <div {...props} className={cx("ios-glass max-w-full overflow-hidden rounded-[1.6rem] border border-white/65 bg-white/70 shadow-xl shadow-slate-950/10 backdrop-blur-2xl ring-1 ring-white/55 transition-all duration-500 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
+=======
+function Card({ children, className = "" }) {
+  return <div className={cx("ios-glass max-w-full overflow-hidden rounded-[1.6rem] border border-white/65 bg-white/70 shadow-xl shadow-slate-950/10 backdrop-blur-2xl ring-1 ring-white/55 transition-all duration-500 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
 }
 
 function CardContent({ children, className = "" }) {
@@ -672,7 +688,11 @@ export default function RestorationHoursTracker() {
   const [editModal, setEditModal] = useState(null);
   const [dayDetail, setDayDetail] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+<<<<<<< HEAD
   const [activeSection, setActiveSection] = useState(() => localStorage.getItem("vodaActiveSection") || "dashboard");
+=======
+  const [activeSection, setActiveSection] = useState("dashboard");
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
   const [expandedApprovalGroups, setExpandedApprovalGroups] = useState({});
   const [messages, setMessages] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -704,6 +724,7 @@ export default function RestorationHoursTracker() {
     const openStatuses = new Set(["active", "scheduled", "in progress", "on hold"]);
     return jobs.filter((job) => openStatuses.has(String(job.status || "active").toLowerCase()));
   }, [jobs]);
+<<<<<<< HEAD
 
   const weeklyJobSuggestions = useMemo(
     () => getWeeklyJobSuggestions(entries, form.date, currentUser, selectedEmployeeId),
@@ -713,6 +734,8 @@ export default function RestorationHoursTracker() {
     () => getSmartJobSuggestions(entries, activeJobs, form.date, currentUser, selectedEmployeeId),
     [entries, activeJobs, form.date, currentUser, selectedEmployeeId]
   );
+=======
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
   const weekDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index)), [weekStart]);
   const weekTwoDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index + 7)), [weekStart]);
   const payPeriodDates = useMemo(() => [...weekDates, ...weekTwoDates], [weekDates, weekTwoDates]);
@@ -1719,8 +1742,13 @@ export default function RestorationHoursTracker() {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-3">
+<<<<<<< HEAD
                       <Button variant="outline" aria-label="Previous pay period" onClick={() => setWeekStart(addDays(weekStart, -14))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronLeft className="h-5 w-5" /></Button>
                       <Button variant="outline" aria-label="Next pay period" onClick={() => setWeekStart(addDays(weekStart, 14))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronRight className="h-5 w-5" /></Button>
+=======
+                      <Button variant="outline" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronLeft className="h-5 w-5" /></Button>
+                      <Button variant="outline" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, 7))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronRight className="h-5 w-5" /></Button>
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
                       <Button variant="cool" onClick={() => exportCsv(false)} className="h-12 gap-2 rounded-[1.25rem] px-4 text-sm sm:h-14 sm:px-5 sm:text-base"><Download className="h-5 w-5" /> CSV</Button>
                       <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> Notes</Button>
                       {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> PDF</Button>}
@@ -1975,7 +2003,11 @@ export default function RestorationHoursTracker() {
                   <Field label="Lunch Break"><div className="flex gap-2"><Button type="button" variant={form.lunchTaken ? "cool" : "outline"} className="flex-1" onClick={() => setForm({ ...form, lunchTaken: true })}>Yes</Button><Button type="button" variant={!form.lunchTaken ? "default" : "outline"} className="flex-1" onClick={() => setForm({ ...form, lunchTaken: false, lunchMinutes: 0 })}>No</Button></div></Field>
                   <Field label="Lunch Minutes"><input type="number" min="0" value={form.lunchMinutes} disabled={!form.lunchTaken} onChange={(e) => setForm({ ...form, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
                   <div className="md:col-span-2"><Field label="Job Notes Required"><textarea required aria-required="true" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input min-h-28 resize-none" placeholder="Required: explain what you completed on this job today, equipment used, progress, or next steps..." /></Field><p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">Notes are required before hours can be submitted.</p></div>
+<<<<<<< HEAD
                   <Field label="Photo / Job Documentation"><div className="space-y-2"><div className="relative"><Camera className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} className="input pl-11" placeholder="Paste photo/job folder link or upload below" /></div>{form.photoUrl && <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/65 p-2 dark:border-white/10 dark:bg-white/5"><img src={form.photoUrl} alt="Job documentation preview" className="h-32 w-full rounded-xl object-cover" /></div>}<label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/60 p-3 text-xs font-black text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200"><Upload className="h-4 w-4" />{isPhotoUploading ? "Compressing + uploading..." : "Upload compressed photo"}<input type="file" accept="image/*" onChange={(e) => uploadJobPhoto(e.target.files?.[0])} className="hidden" disabled={isPhotoUploading} /></label></div></Field>
+=======
+                  <Field label="Photo / Job Documentation"><div className="space-y-2"><div className="relative"><Camera className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} className="input pl-11" placeholder="Paste photo/job folder link or upload below" /></div><input type="file" accept="image/*" onChange={(e) => uploadJobPhoto(e.target.files?.[0])} className="block w-full rounded-2xl border border-slate-200 bg-white/70 p-2 text-xs font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300" /></div></Field>
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
                   <div className="md:col-span-2"><Field label="Employee Signature / Confirmation"><div className="relative"><PenLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.employeeSignature} onChange={(e) => setForm({ ...form, employeeSignature: e.target.value })} className="input pl-11" placeholder="Type employee name to confirm this entry" /></div></Field></div>
                 </div>
                 <div className="mt-4 flex items-center justify-between rounded-3xl bg-gradient-to-br from-slate-900 to-slate-700 p-4 text-white shadow-xl shadow-slate-950/10 dark:from-slate-800 dark:to-cyan-950">
@@ -2083,7 +2115,11 @@ export default function RestorationHoursTracker() {
       {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} activeJobs={activeJobs} jobs={jobs} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
+<<<<<<< HEAD
       {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={openDenyModal} openQuickAddForDate={openQuickAddForDate} />}
+=======
+      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={openDenyModal} />}
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
       <style>{inputStyles}</style>
     </div>
   );
@@ -2285,7 +2321,11 @@ function DocumentationWeek({ title, entries, getName, openDayDetail }) {
   );
 }
 
+<<<<<<< HEAD
 function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, updateStatus, openEditModal, setReviewModal, openQuickAddForDate }) {
+=======
+function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, updateStatus, openEditModal, setReviewModal }) {
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
   const dayEntries = dayDetail.entries || [];
   const activeEntries = dayEntries.filter((entry) => !isDeniedEntry(entry));
   const deniedEntries = dayEntries.filter((entry) => isDeniedEntry(entry));
@@ -2642,10 +2682,13 @@ select {
   min-width: 0;
 }
 
+<<<<<<< HEAD
 .ios-glass { transform: translateZ(0); }
 .ios-glass:hover { box-shadow: 0 24px 70px rgba(15, 23, 42, .12); }
 @supports (-webkit-touch-callout: none) { .ios-glass { -webkit-backdrop-filter: blur(22px); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; } }
+=======
+>>>>>>> 73a7ae66c853d1119c093415da59a6f2a83971f8
 @media (max-width: 480px) {
   .bubble-fit {
     font-size: clamp(0.62rem, 2.7vw, 0.78rem);
