@@ -1,7 +1,4 @@
 @import "tailwindcss";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html {
   width: 100%;
@@ -86,9 +83,6 @@ select {
     min-width: 0;
   }
 }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html, body, #root { width: 100%; min-height: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { margin: 0; overscroll-behavior: none; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -105,9 +99,6 @@ button:active { transform: scale(.985); }
 .dark .text-slate-500, .dark .text-slate-400, .dark .text-slate-300 { color: rgba(203,213,225,.82) !important; }
 .dark .text-slate-600, .dark .text-slate-700 { color: rgba(226,232,240,.88) !important; }
 @media (max-width: 768px) { .mobile-padding { padding-left: 14px !important; padding-right: 14px !important; } }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html,
 body,
@@ -370,9 +361,6 @@ button:active {
     min-width: 0;
   }
 }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html {
   width: 100%;
@@ -569,4 +557,163 @@ button:active {
   .grid {
     min-width: 0;
   }
+}
+
+/* Goddard luxury UI polish pass: fixes forced wrapping, centering, and adds softer iOS glass. */
+:root {
+  --voda-glass-light: rgba(255, 255, 255, 0.72);
+  --voda-glass-border-light: rgba(255, 255, 255, 0.68);
+  --voda-glass-dark: rgba(15, 23, 42, 0.68);
+  --voda-glass-border-dark: rgba(255, 255, 255, 0.12);
+}
+
+.ios-glass,
+header,
+.card,
+.glass-card,
+.panel,
+.dashboard-card {
+  position: relative;
+  backdrop-filter: blur(24px) saturate(145%);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+}
+
+.ios-glass::before,
+header::before,
+.card::before,
+.glass-card::before,
+.panel::before,
+.dashboard-card::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.06) 38%, rgba(255,255,255,0));
+  opacity: .78;
+  z-index: 0;
+}
+
+.ios-glass > *,
+header > *,
+.card > *,
+.glass-card > *,
+.panel > *,
+.dashboard-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.bubble-fit {
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  line-height: 1 !important;
+}
+
+.bubble-fit span,
+.bubble-fit p {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap !important;
+  word-break: normal !important;
+}
+
+button.bubble-fit,
+.bubble-fit.inline-flex,
+.bubble-fit.flex {
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+button svg,
+.bubble-fit svg {
+  flex: 0 0 auto;
+}
+
+.rounded-full,
+[class*="rounded-full"] {
+  white-space: nowrap;
+}
+
+/* Keeps tiny phone screens from awkward wrapping while preserving tap size. */
+@media (max-width: 420px) {
+  .bubble-fit {
+    font-size: clamp(0.62rem, 2.65vw, 0.82rem) !important;
+    letter-spacing: 0.01em !important;
+  }
+  button.bubble-fit {
+    padding-left: .72rem !important;
+    padding-right: .72rem !important;
+  }
+}
+
+/* Better centering and spacing for cards/grids after the previous wrap fix. */
+.grid > *,
+.flex > * {
+  min-width: 0;
+}
+
+.metric-card,
+.card,
+.glass-card,
+.panel,
+.dashboard-card {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Smoother, less jumpy animations. */
+button,
+a,
+[role="button"],
+.ios-glass,
+.card,
+.glass-card,
+.panel,
+.dashboard-card {
+  transition-duration: 360ms !important;
+  transition-timing-function: cubic-bezier(.22,1,.36,1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Light mode polish: cleaner luxury glass instead of flat grey blocks. */
+:not(.dark) .input,
+:not(.dark) input,
+:not(.dark) select,
+:not(.dark) textarea {
+  background: rgba(255,255,255,.86) !important;
+  border-color: rgba(203,213,225,.82) !important;
+  color: #0f172a !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.65), 0 12px 34px rgba(15,23,42,.06) !important;
+}
+
+:not(.dark) .ios-glass,
+:not(.dark) header,
+:not(.dark) .card,
+:not(.dark) .glass-card,
+:not(.dark) .panel,
+:not(.dark) .dashboard-card {
+  border-color: var(--voda-glass-border-light) !important;
+  box-shadow: 0 18px 56px rgba(15,23,42,.10), inset 0 1px 0 rgba(255,255,255,.62) !important;
+}
+
+.dark .ios-glass::before,
+.dark header::before,
+.dark .card::before,
+.dark .glass-card::before,
+.dark .panel::before,
+.dark .dashboard-card::before {
+  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.025) 44%, rgba(255,255,255,0));
+  opacity: .82;
 }

@@ -1,21 +1,20 @@
 {
-  "name": "VODA Hours Portal",
-  "short_name": "VODA Hours",
-  "description": "Mobile-first field hours, payroll approval, and job documentation portal for VODA Of Tucson.",
+  "name": "VODA Of Tucson",
+  "short_name": "VODA",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
-  "orientation": "portrait-primary",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "/VODA CIRCLE W DOTS PNG.png",
+      "src": "/VODA-DOTS-ICON.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/TUCSON VODA COLORED PNG 1600X1600.png",
+      "src": "/VODA-DOTS-ICON.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
-import React, { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
   AlertCircle,
@@ -53,6 +53,8 @@ const jobTypes = [
 const brandLogo = "/TUCSON VODA COLORED PNG 1600X1600.png";
 const iconLogo = "/VODA CIRCLE W DOTS PNG.png";
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const employeeRoles = ["admin", "manager", "tech", "employee"];
+const jobStatuses = ["active", "scheduled", "in progress", "on hold", "completed", "closed"];
 
 const loginTips = [
   { title: "Water Damage Tip", text: "Start drying within the first 24–48 hours whenever possible. Fast airflow and moisture checks help prevent hidden secondary damage." },
@@ -108,32 +110,92 @@ const loginTips = [
 ];
 
 const spring = { duration: 0.42, ease: [0.22, 1, 0.36, 1] };
+const smoothSpring = { type: "spring", stiffness: 170, damping: 24, mass: 0.75 };
 
 const floatingAnimation = {
   animate: { y: [0, -3, 0] },
   transition: { duration: 5.5, repeat: Infinity, ease: "easeInOut" },
 };
 const softMotion = {
-  initial: { opacity: 0, y: 14, scale: 0.99 },
+  initial: { opacity: 0, y: 14, scale: 0.985 },
   animate: { opacity: 1, y: 0, scale: 1 },
-  transition: spring,
+  transition: smoothSpring,
 };
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
+const APP_TIME_ZONE = "America/Phoenix";
+const PHOENIX_OFFSET = "-07:00";
+
+function phoenixDateKeyToDate(dateKey) {
+  return new Date(`${dateKey}T12:00:00${PHOENIX_OFFSET}`);
+}
+
+function getPhoenixParts(date, options = {}) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    ...options,
+  }).formatToParts(date);
+}
+
+function getPhoenixPart(date, type, options = {}) {
+  return getPhoenixParts(date, options).find((part) => part.type === type)?.value || "";
+}
+
 function getMonday(date = new Date()) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
+  const d = phoenixDateKeyToDate(formatDate(date));
+  const day = d.getUTCDay();
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+  d.setUTCDate(diff);
+  d.setUTCHours(19, 0, 0, 0);
   return d;
 }
 
-function formatDate(date) {
-  return date.toISOString().slice(0, 10);
+function getPayPeriodStart(date = new Date()) {
+  const anchor = phoenixDateKeyToDate("2026-06-01");
+  const monday = getMonday(date);
+  const daysSinceAnchor = Math.floor((monday.getTime() - anchor.getTime()) / (1000 * 60 * 60 * 24));
+  const periodIndex = Math.floor(daysSinceAnchor / 14);
+  return addDays(anchor, periodIndex * 14);
+}
+
+function getWeeklyJobSuggestions(entries = [], selectedDate, currentUser, selectedEmployeeId = "all") {
+  if (!selectedDate) return [];
+  const selectedKey = formatDate(selectedDate);
+  const weekStartKey = formatDate(getMonday(selectedDate));
+  const names = entries
+    .filter((entry) => {
+      const entryDate = entry.date;
+      const sameWeekBeforeSelectedDate = entryDate >= weekStartKey && entryDate < selectedKey;
+      const correctEmployee = currentUser?.role === "admin"
+        ? selectedEmployeeId === "all" || entry.employeeId === selectedEmployeeId
+        : entry.employeeId === currentUser?.id;
+      return sameWeekBeforeSelectedDate && correctEmployee && String(entry.customerName || "").trim();
+    })
+    .map((entry) => String(entry.customerName || "").trim());
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+}
+
+function formatDate(date = new Date()) {
+  const target = date instanceof Date ? date : phoenixDateKeyToDate(String(date));
+  const year = getPhoenixPart(target, "year", { year: "numeric", month: "2-digit", day: "2-digit" });
+  const month = getPhoenixPart(target, "month", { year: "numeric", month: "2-digit", day: "2-digit" });
+  const day = getPhoenixPart(target, "day", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return `${year}-${month}-${day}`;
+}
+
+function formatPhoenixTime(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parts.find((part) => part.type === "hour")?.value || "00";
+  const minute = parts.find((part) => part.type === "minute")?.value || "00";
+  return `${hour === "24" ? "00" : hour}:${minute}`;
 }
 
 function ordinalSuffix(day) {
@@ -147,39 +209,46 @@ function ordinalSuffix(day) {
 
 function displayDate(value) {
   if (!value) return "";
-  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`);
+  const date = value instanceof Date ? value : phoenixDateKeyToDate(String(value));
   if (Number.isNaN(date.getTime())) return String(value);
-  const month = date.toLocaleDateString(undefined, { month: "long" });
-  const day = date.getDate();
-  const year = date.getFullYear();
+  const month = getPhoenixPart(date, "month", { month: "long", day: "numeric", year: "numeric" });
+  const day = Number(getPhoenixPart(date, "day", { month: "long", day: "numeric", year: "numeric" }));
+  const year = getPhoenixPart(date, "year", { month: "long", day: "numeric", year: "numeric" });
   return `${month} ${day}${ordinalSuffix(day)}, ${year}`;
 }
 
 function displayShortDate(value) {
   if (!value) return "";
-  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`);
+  const date = value instanceof Date ? value : phoenixDateKeyToDate(String(value));
   if (Number.isNaN(date.getTime())) return String(value);
-  const month = date.toLocaleDateString(undefined, { month: "short" });
-  return `${month} ${date.getDate()}${ordinalSuffix(date.getDate())}`;
+  const month = getPhoenixPart(date, "month", { month: "short", day: "numeric" });
+  const day = Number(getPhoenixPart(date, "day", { month: "short", day: "numeric" }));
+  return `${month} ${day}${ordinalSuffix(day)}`;
 }
 
 
 function addDays(date, days) {
   const d = new Date(date);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 }
 
 function getMonthStart(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+  const target = date instanceof Date ? date : phoenixDateKeyToDate(String(date));
+  const year = Number(getPhoenixPart(target, "year", { year: "numeric", month: "2-digit", day: "2-digit" }));
+  const month = getPhoenixPart(target, "month", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return phoenixDateKeyToDate(`${year}-${month}-01`);
 }
 
 function addMonths(date, months) {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const target = date instanceof Date ? date : phoenixDateKeyToDate(String(date));
+  const year = Number(getPhoenixPart(target, "year", { year: "numeric", month: "2-digit", day: "2-digit" }));
+  const month = Number(getPhoenixPart(target, "month", { year: "numeric", month: "2-digit", day: "2-digit" }));
+  return new Date(Date.UTC(year, month - 1 + months, 1, 19, 0, 0, 0));
 }
 
 function monthLabel(date) {
-  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE, month: "long", year: "numeric" }).format(date);
 }
 
 function getCalendarGridDates(monthDate) {
@@ -212,6 +281,21 @@ function isDeniedEntry(entry) {
   return String(entry?.approvalStatus || entry?.status || "").toLowerCase() === "denied";
 }
 
+function isVacationEntry(entry) {
+  const text = `${entry?.jobType || ""} ${entry?.customerName || ""} ${entry?.notes || ""}`.toLowerCase();
+  return text.includes("vacation") || text.includes("pto") || text.includes("paid time off");
+}
+
+function summarizePayroll(entries = []) {
+  const activeEntries = entries.filter((entry) => !isDeniedEntry(entry));
+  const totalHours = activeEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+  const vacationHours = activeEntries.filter(isVacationEntry).reduce((sum, entry) => sum + entryHours(entry), 0);
+  const workedHours = Math.max(0, totalHours - vacationHours);
+  const regularHours = Math.min(40, workedHours);
+  const overtimeHours = Math.max(0, workedHours - 40);
+  return { totalHours, regularHours, overtimeHours, vacationHours };
+}
+
 const deniedEntryShell = "border-slate-200 bg-slate-200/55 opacity-35 grayscale shadow-none ring-slate-200/60 hover:opacity-45 dark:border-white/10 dark:bg-white/5 dark:ring-white/10";
 const deniedText = "text-slate-400 line-through decoration-slate-400/50 dark:text-slate-500";
 
@@ -220,6 +304,7 @@ function normalizeEntry(entry) {
   return {
     id: entry.id,
     employeeId: entry.employee_id,
+    jobId: entry.job_id || null,
     jobType: entry.job_type || "Other",
     customerName: entry.customer_name || "Unnamed Job",
     job: `${entry.job_type || "Other"} · ${entry.customer_name || "Unnamed Job"}`,
@@ -258,7 +343,7 @@ function Button({ children, className = "", variant = "default", size = "default
   return (
     <button
       className={cx(
-        "inline-flex max-w-full items-center justify-center overflow-hidden rounded-2xl font-bold tracking-[-0.01em] transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
+        "bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-2xl text-center font-bold leading-none tracking-[-0.01em] whitespace-nowrap transition-all duration-500 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
         variants[variant] || variants.default,
         sizes[size] || sizes.default,
         className
@@ -270,8 +355,8 @@ function Button({ children, className = "", variant = "default", size = "default
   );
 }
 
-function Card({ children, className = "" }) {
-  return <div className={cx("max-w-full overflow-hidden rounded-[1.6rem] border border-white/55 bg-slate-100/64 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 transition-all duration-300 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
+function Card({ children, className = "", ...props }) {
+  return <div {...props} className={cx("ios-glass max-w-full overflow-hidden rounded-[1.6rem] border border-white/65 bg-white/70 shadow-xl shadow-slate-950/10 backdrop-blur-2xl ring-1 ring-white/55 transition-all duration-500 ease-out will-change-transform dark:border-white/10 dark:bg-slate-900/62 dark:shadow-black/20 dark:ring-white/10", className)}>{children}</div>;
 }
 
 function CardContent({ children, className = "" }) {
@@ -288,7 +373,7 @@ function StatusPill({ status }) {
     denied: "bg-red-100 text-red-800 border-red-300 shadow-sm dark:bg-red-500/20 dark:text-red-100 dark:border-red-300/20",
   };
 
-  return <span className={cx("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-black capitalize", styles[normalized] || styles.pending)}>{normalized}</span>;
+  return <span className={cx("bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center rounded-full border px-2.5 py-1 text-center text-[10px] font-black leading-none capitalize whitespace-nowrap sm:text-xs", styles[normalized] || styles.pending)}>{normalized}</span>;
 }
 
 function Field({ label, children }) {
@@ -314,19 +399,241 @@ function MetricCard({ icon, label, value }) {
   );
 }
 
+function SectionNav({ activeSection, setActiveSection, isAdmin }) {
+  const items = [
+    { id: "dashboard", label: "Home", icon: <Activity /> },
+    { id: "timesheets", label: "Timesheets", icon: <CalendarDays /> },
+    { id: "exports", label: "Docs", icon: <FileText /> },
+    { id: "add", label: "Add Hours", icon: <Plus /> },
+    { id: "review", label: isAdmin ? "Review" : "Entries", icon: <CheckCircle2 /> },
+    ...(isAdmin ? [{ id: "manage", label: "Manage", icon: <Users /> }, { id: "history", label: "History", icon: <Clock /> }] : []),
+    { id: "updates", label: "Updates", icon: <MessageSquare /> },
+    { id: "tools", label: "Tools", icon: <Sparkles /> },
+  ];
+
+  return (
+    <motion.nav {...softMotion} className="mb-4 rounded-[1.6rem] border border-white/55 bg-white/72 p-2 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/66 dark:ring-white/10">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-9">
+        {items.map((item) => {
+          const selected = activeSection === item.id;
+          return (
+            <button key={item.id} type="button" onClick={() => setActiveSection(item.id)} className={cx("bubble-fit flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[1.15rem] px-2 py-3 text-center text-[9.5px] font-black uppercase leading-none tracking-[0.04em] transition-all duration-500 sm:min-h-[70px] sm:text-[10.5px]", selected ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 dark:bg-white dark:text-slate-950" : "bg-white/55 text-slate-500 hover:bg-white hover:text-slate-950 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white")}>
+              {React.cloneElement(item.icon, { className: "h-4 w-4" })}
+              <span className="block max-w-full truncate leading-none">{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </motion.nav>
+  );
+}
+
 function EntryDetails({ entry, employee }) {
   return (
     <div className="grid gap-2 rounded-2xl bg-slate-50/80 p-3 text-xs font-semibold text-slate-600 sm:grid-cols-2 dark:bg-white/5 dark:text-slate-300">
       <p className="flex items-center gap-2"><UserRound className="h-3.5 w-3.5" /> {employee?.name || "Employee"}</p>
       <p className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> {entryHours(entry).toFixed(2)} total hrs</p>
       <p className="sm:col-span-2">Lunch: {entry.lunchTaken ? `${entry.lunchMinutes} min` : "No lunch break"}</p>
-      {entry.notes && <p className="sm:col-span-2">Notes: {entry.notes}</p>}
+      {entry.notes && <div className="sm:col-span-2 rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-white/10 dark:bg-slate-950/30"><p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Job Notes</p><p className="whitespace-pre-wrap break-words leading-5 text-slate-700 dark:text-slate-200">{entry.notes}</p></div>}
       {entry.approvalStatus === "denied" && entry.denialReason && (
         <p className="sm:col-span-2 rounded-2xl border border-red-300 bg-red-100 p-3 font-black text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">
           Denial reason: {entry.denialReason}
         </p>
       )}
     </div>
+  );
+}
+
+
+function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleApprovalGroup, updateStatus, setReviewModal, openEditModal, setSelectedEmployeeId, setActiveSection, search, setSearch }) {
+  const pendingTotal = approvalGroups.reduce((sum, group) => sum + group.entries.length, 0);
+  const pendingHours = approvalGroups.reduce((sum, group) => sum + group.totalHours, 0);
+
+  return (
+    <Card>
+      <CardContent>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Approval Queue</p>
+            <h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">Hours Needing Approval</h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">Grouped by employee. Approved or denied hours leave this queue automatically, but remain available in Timesheets, History, and Docs.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:min-w-56">
+            <MiniStat label="Pending" value={pendingTotal} tone="amber" />
+            <MiniStat label="Hours" value={`${pendingHours.toFixed(2)}h`} tone="cyan" />
+          </div>
+        </div>
+
+        <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search pending approvals" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search pending jobs, notes, or employees..." /></div>
+          <Button type="button" variant="outline" onClick={() => { setSelectedEmployeeId("all"); setActiveSection("history"); }} className="min-h-12">Find Approved / History</Button>
+        </div>
+
+        <div className="space-y-3">
+          {approvalGroups.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-6 text-center dark:border-white/10 dark:bg-white/5">
+              <CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-emerald-600 dark:text-emerald-300" />
+              <p className="text-sm font-black text-slate-800 dark:text-white">No approvals needed right now.</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Approved entries can still be reviewed from History, Timesheets, or Docs.</p>
+            </div>
+          ) : approvalGroups.map(({ employee, entries, totalHours }) => {
+            const isOpen = expandedApprovalGroups[employee.id] !== false;
+            return (
+              <section key={employee.id} className="overflow-hidden rounded-[1.55rem] border border-slate-200 bg-white/82 shadow-lg shadow-slate-950/5 ring-1 ring-white/80 dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
+                <button type="button" onClick={() => toggleApprovalGroup(employee.id)} className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-slate-50 dark:hover:bg-white/5" aria-expanded={isOpen}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <AvatarBadge person={employee} />
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-black text-slate-950 dark:text-white">{employee.name}</h3>
+                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{entries.length} pending · {totalHours.toFixed(2)} hrs awaiting review</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 dark:border-amber-300/15 dark:bg-amber-400/10 dark:text-amber-200">{entries.length}</span>
+                    <ChevronRight className={cx("h-5 w-5 text-slate-400 transition-transform", isOpen && "rotate-90")} />
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="space-y-3 border-t border-slate-100 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-slate-950/20 sm:p-4">
+                    {entries.map((entry) => (
+                      <article key={entry.id} className="rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/35">
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-black text-slate-950 dark:text-white">{entry.customerName}</p>
+                            <p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p>
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p>
+                          </div>
+                          <StatusPill status={entry.approvalStatus} />
+                        </div>
+                        <EntryDetails entry={entry} employee={employee} />
+                        {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
+                        <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5 sm:grid-cols-3">
+                          <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
+                          <Button size="sm" variant="danger" onClick={() => setReviewModal(entry)}>Deny</Button>
+                          <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminControlCenter({
+  employees,
+  jobs,
+  inviteEmail,
+  setInviteEmail,
+  inviteNote,
+  createInviteDraft,
+  employeeDrafts,
+  updateEmployeeDraft,
+  saveEmployeeControls,
+  jobForm,
+  setJobForm,
+  createJobRecord,
+  updateJobStatus,
+}) {
+  return (
+    <Card>
+      <CardContent>
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Control Center</p>
+            <h2 className="text-xl font-black tracking-[-0.04em] sm:text-2xl">Employees & Jobs</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Manage hours access, roles, active employees, and job records from inside the app.</p>
+          </div>
+          <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-black text-cyan-700 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200">Feature Pack 1</div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[1fr_0.95fr]">
+          <div className="rounded-[1.5rem] border border-white/70 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-black tracking-[-0.03em]">Employee management</h3>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Set role, status, hourly rate, and approval access.</p>
+              </div>
+              <Users className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
+            </div>
+
+            <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input className="input" type="email" placeholder="employee@email.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+              <Button onClick={createInviteDraft} className="gap-2"><Plus className="h-4 w-4" /> Invite draft</Button>
+            </div>
+            {inviteNote && <p className="mb-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs font-bold text-cyan-800 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-100">{inviteNote}</p>}
+
+            <div className="space-y-3">
+              {employees.map((employee) => {
+                const draft = employeeDrafts[employee.id] || employee;
+                const isActive = draft.active !== false;
+                return (
+                  <div key={employee.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-950 dark:text-white">{employee.name}</p>
+                        <p className="truncate text-xs font-bold text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
+                      </div>
+                      <span className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]", isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200" : "bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400")}>{isActive ? "Active" : "Inactive"}</span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-4">
+                      <select className="input" value={draft.role || "employee"} onChange={(e) => updateEmployeeDraft(employee.id, { role: e.target.value })}>{employeeRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select>
+                      <select className="input" value={String(draft.active !== false)} onChange={(e) => updateEmployeeDraft(employee.id, { active: e.target.value === "true" })}><option value="true">Active</option><option value="false">Inactive</option></select>
+                      <input className="input" type="number" min="0" step="0.01" placeholder="Hourly rate" value={draft.hourlyRate ?? ""} onChange={(e) => updateEmployeeDraft(employee.id, { hourlyRate: e.target.value })} />
+                      <Button variant="outline" onClick={() => saveEmployeeControls(employee.id)} className="gap-2"><CheckCircle2 className="h-4 w-4" /> Save</Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-white/70 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-black tracking-[-0.03em]">Job database</h3>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Create permanent job records for hours tracking.</p>
+              </div>
+              <BriefcaseBusiness className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
+            </div>
+            <div className="grid gap-2">
+              <input className="input" placeholder="Customer / job name" value={jobForm.customerName} onChange={(e) => setJobForm((current) => ({ ...current, customerName: e.target.value }))} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input className="input" placeholder="Job number" value={jobForm.jobNumber} onChange={(e) => setJobForm((current) => ({ ...current, jobNumber: e.target.value }))} />
+                <select className="input" value={jobForm.jobType} onChange={(e) => setJobForm((current) => ({ ...current, jobType: e.target.value }))}>{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+              </div>
+              <input className="input" placeholder="Customer address" value={jobForm.address} onChange={(e) => setJobForm((current) => ({ ...current, address: e.target.value }))} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input className="input" placeholder="Insurance / carrier" value={jobForm.carrier} onChange={(e) => setJobForm((current) => ({ ...current, carrier: e.target.value }))} />
+                <input className="input" placeholder="Claim number" value={jobForm.claimNumber} onChange={(e) => setJobForm((current) => ({ ...current, claimNumber: e.target.value }))} />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <select className="input" value={jobForm.assignedEmployeeId} onChange={(e) => setJobForm((current) => ({ ...current, assignedEmployeeId: e.target.value }))}>
+                  <option value="">Unassigned</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                </select>
+                <Button onClick={createJobRecord} className="gap-2"><Plus className="h-4 w-4" /> Create job</Button>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {jobs.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm font-bold text-slate-400 dark:border-white/10 dark:text-slate-500">No jobs created yet.</div> : jobs.map((job) => (
+                <div key={job.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0"><p className="truncate text-sm font-black text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType} {job.jobNumber ? `• ${job.jobNumber}` : ""}</p>{job.address && <p className="mt-1 truncate text-xs font-semibold text-slate-400 dark:text-slate-500">{job.address}</p>}</div>
+                    <select className="input max-w-[150px]" value={job.status || "active"} onChange={(e) => updateJobStatus(job.id, e.target.value)}>{jobStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -350,11 +657,14 @@ export default function RestorationHoursTracker() {
     try { return JSON.parse(localStorage.getItem("vodaLiveShift") || "null"); } catch { return null; }
   });
   const [stoppedShiftReview, setStoppedShiftReview] = useState(null);
+  const [showSplash, setShowSplash] = useState(false);
+  const [isPhotoUploading, setIsPhotoUploading] = useState(false);
+  const swipeStartX = useRef(null);
   const loginTip = useMemo(() => loginTips[Math.floor(Math.random() * loginTips.length)], []);
 
   const [employees, setEmployees] = useState([]);
   const [entries, setEntries] = useState([]);
-  const [weekStart, setWeekStart] = useState(getMonday(new Date()));
+  const [weekStart, setWeekStart] = useState(getPayPeriodStart(new Date()));
   const [historyMonth, setHistoryMonth] = useState(getMonthStart(new Date()));
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("all");
   const [search, setSearch] = useState("");
@@ -362,13 +672,19 @@ export default function RestorationHoursTracker() {
   const [editModal, setEditModal] = useState(null);
   const [dayDetail, setDayDetail] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState(() => localStorage.getItem("vodaActiveSection") || "dashboard");
+  const [expandedApprovalGroups, setExpandedApprovalGroups] = useState({});
   const [messages, setMessages] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [employeeDrafts, setEmployeeDrafts] = useState({});
+  const [jobForm, setJobForm] = useState({ customerName: "", jobNumber: "", jobType: jobTypes[0], address: "", carrier: "", claimNumber: "", assignedEmployeeId: "" });
   const [messageForm, setMessageForm] = useState({ recipientId: "all", title: "", body: "" });
   const [profileForm, setProfileForm] = useState({ firstName: "", lastName: "", phone: "", avatarUrl: "" });
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteNote, setInviteNote] = useState("");
   const [form, setForm] = useState({
     date: formatDate(new Date()),
+    jobId: "",
     jobType: jobTypes[0],
     customerName: "",
     start: "08:00",
@@ -383,7 +699,23 @@ export default function RestorationHoursTracker() {
   });
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
+  const getEmployeeName = (employeeId) => employeeId === currentUser?.id ? currentUser?.name : employeeById.get(employeeId)?.name || "Unknown Employee";
+  const activeJobs = useMemo(() => {
+    const openStatuses = new Set(["active", "scheduled", "in progress", "on hold"]);
+    return jobs.filter((job) => openStatuses.has(String(job.status || "active").toLowerCase()));
+  }, [jobs]);
+
+  const weeklyJobSuggestions = useMemo(
+    () => getWeeklyJobSuggestions(entries, form.date, currentUser, selectedEmployeeId),
+    [entries, form.date, currentUser, selectedEmployeeId]
+  );
+  const smartJobSuggestions = useMemo(
+    () => getSmartJobSuggestions(entries, activeJobs, form.date, currentUser, selectedEmployeeId),
+    [entries, activeJobs, form.date, currentUser, selectedEmployeeId]
+  );
   const weekDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index)), [weekStart]);
+  const weekTwoDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index + 7)), [weekStart]);
+  const payPeriodDates = useMemo(() => [...weekDates, ...weekTwoDates], [weekDates, weekTwoDates]);
   const historyCalendarDays = useMemo(() => getCalendarGridDates(historyMonth), [historyMonth]);
 
   useEffect(() => {
@@ -458,6 +790,24 @@ export default function RestorationHoursTracker() {
   }, [offlineQueue]);
 
   useEffect(() => {
+    localStorage.setItem("vodaActiveSection", activeSection);
+  }, [activeSection]);
+
+
+  useEffect(() => {
+    const lastOpened = Number(localStorage.getItem("vodaLastOpenedAt") || 0);
+    const nowMs = Date.now();
+    const awayForAWhile = nowMs - lastOpened > 1000 * 60 * 30;
+    if (awayForAWhile) {
+      setShowSplash(true);
+      const splashTimer = window.setTimeout(() => setShowSplash(false), 1500);
+      localStorage.setItem("vodaLastOpenedAt", String(nowMs));
+      return () => window.clearTimeout(splashTimer);
+    }
+    localStorage.setItem("vodaLastOpenedAt", String(nowMs));
+  }, []);
+
+  useEffect(() => {
     const syncWhenOnline = () => syncOfflineQueue();
     window.addEventListener("online", syncWhenOnline);
     return () => window.removeEventListener("online", syncWhenOnline);
@@ -501,22 +851,31 @@ export default function RestorationHoursTracker() {
     const messagesQuery = isAdmin
       ? supabase.from("portal_messages").select("*").order("created_at", { ascending: false }).limit(25)
       : supabase.from("portal_messages").select("*").or(`recipient_id.eq.${currentUser.id},recipient_id.is.null`).order("created_at", { ascending: false }).limit(12);
+    const jobsQuery = isAdmin
+      ? supabase.from("app_jobs").select("*").order("created_at", { ascending: false }).limit(150)
+      : supabase.from("app_jobs").select("*").or(`assigned_employee_id.eq.${currentUser.id},assigned_employee_id.is.null`).neq("status", "closed").order("created_at", { ascending: false }).limit(100);
 
-    const [profilesResponse, entriesResponse, messagesResponse] = await Promise.all([profilesQuery, entriesQuery, messagesQuery]);
+    const [profilesResponse, entriesResponse, messagesResponse, jobsResponse] = await Promise.all([profilesQuery, entriesQuery, messagesQuery, jobsQuery]);
 
     if (profilesResponse.error) setAppError(profilesResponse.error.message);
     if (entriesResponse.error) setAppError(entriesResponse.error.message);
     if (messagesResponse.error && !String(messagesResponse.error.message || "").includes("portal_messages")) setAppError(messagesResponse.error.message);
+    if (jobsResponse.error && !String(jobsResponse.error.message || "").includes("app_jobs")) setAppError(jobsResponse.error.message);
 
-    setEmployees((profilesResponse.data || []).map((profile) => ({
+    const mappedEmployees = (profilesResponse.data || []).map((profile) => ({
       id: profile.id,
       name: profile.full_name || `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unnamed Employee",
       firstName: profile.first_name || "",
       lastName: profile.last_name || "",
       phone: profile.phone || "",
       avatarUrl: profile.avatar_url || "",
+      email: profile.email || "",
       role: profile.role || "employee",
-    })));
+      active: profile.active !== false,
+      hourlyRate: profile.hourly_rate ?? "",
+    }));
+    setEmployees(mappedEmployees);
+    setEmployeeDrafts(Object.fromEntries(mappedEmployees.map((employee) => [employee.id, employee])));
     setEntries((entriesResponse.data || []).map(normalizeEntry));
     setMessages((messagesResponse.data || []).map((message) => ({
       id: message.id,
@@ -527,6 +886,7 @@ export default function RestorationHoursTracker() {
       relatedEntryId: message.related_entry_id || null,
       createdAt: message.created_at,
     })));
+    setJobs((jobsResponse.data || []).map((job) => ({ id: job.id, customerName: job.customer_name || "Unnamed Job", jobNumber: job.job_number || "", jobType: job.job_type || "Other", address: job.address || "", carrier: job.carrier || "", claimNumber: job.claim_number || "", assignedEmployeeId: job.assigned_employee_id || "", status: job.status || "active", createdAt: job.created_at })));
     setAppLoading(false);
   }
 
@@ -552,17 +912,44 @@ export default function RestorationHoursTracker() {
     if (!currentUser) return [];
     const searchValue = search.toLowerCase().trim();
     return entries.filter((entry) => {
-      const inWeek = weekDates.some((date) => formatDate(date) === entry.date);
+      const inWeek = payPeriodDates.some((date) => formatDate(date) === entry.date);
       const correctUser = currentUser.role === "admin" ? selectedEmployeeId === "all" || entry.employeeId === selectedEmployeeId : entry.employeeId === currentUser.id;
       const matchesSearch = !searchValue || `${entry.jobType} ${entry.customerName} ${entry.notes}`.toLowerCase().includes(searchValue);
       return inWeek && correctUser && matchesSearch;
     });
-  }, [entries, weekDates, currentUser, selectedEmployeeId, search]);
+  }, [entries, payPeriodDates, currentUser, selectedEmployeeId, search]);
 
   const weeklyTotal = visibleEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
   const pendingCount = visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())).length;
   const approvedPayrollTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
   const deniedHoursTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "denied").reduce((sum, entry) => sum + entryHours(entry), 0);
+  const pendingApprovalEntries = useMemo(() => visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())), [visibleEntries]);
+  const approvalGroups = useMemo(() => {
+    if (currentUser?.role !== "admin") return [];
+    return employees
+      .map((employee) => {
+        const employeeEntries = pendingApprovalEntries
+          .filter((entry) => entry.employeeId === employee.id)
+          .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`));
+        return {
+          employee,
+          entries: employeeEntries,
+          totalHours: employeeEntries.reduce((sum, entry) => sum + entryHours(entry), 0),
+        };
+      })
+      .filter((group) => group.entries.length > 0);
+  }, [currentUser, employees, pendingApprovalEntries]);
+  const toggleApprovalGroup = (employeeId) => setExpandedApprovalGroups((current) => ({ ...current, [employeeId]: current[employeeId] === false ? true : false }));
+  const weekOneEntries = visibleEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+  const weekTwoEntries = visibleEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+  const weekOneSummary = summarizePayroll(weekOneEntries);
+  const weekTwoSummary = summarizePayroll(weekTwoEntries);
+  const payPeriodSummary = {
+    totalHours: weekOneSummary.totalHours + weekTwoSummary.totalHours,
+    regularHours: weekOneSummary.regularHours + weekTwoSummary.regularHours,
+    overtimeHours: weekOneSummary.overtimeHours + weekTwoSummary.overtimeHours,
+    vacationHours: weekOneSummary.vacationHours + weekTwoSummary.vacationHours,
+  };
 
   const employeeSummaries = useMemo(() => {
     if (currentUser?.role !== "admin") return [];
@@ -584,7 +971,7 @@ export default function RestorationHoursTracker() {
   const historyEntries = useMemo(() => {
     if (currentUser?.role !== "admin") return [];
     return entries.filter((entry) => {
-      const entryDate = new Date(`${entry.date}T00:00:00`);
+      const entryDate = phoenixDateKeyToDate(entry.date);
       const sameMonth = entryDate.getFullYear() === historyMonth.getFullYear() && entryDate.getMonth() === historyMonth.getMonth();
       const correctEmployee = selectedEmployeeId === "all" || entry.employeeId === selectedEmployeeId;
       return sameMonth && correctEmployee;
@@ -594,6 +981,16 @@ export default function RestorationHoursTracker() {
   const historyTotal = historyEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
   const historyApprovedTotal = historyEntries.filter((entry) => entry.approvalStatus === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
   const selectedHistoryEmployeeName = selectedEmployeeId === "all" ? "All employees" : employeeById.get(selectedEmployeeId)?.name || "Selected employee";
+
+  function applyJobSelection(jobId, updater = setForm) {
+    const selectedJob = jobs.find((job) => job.id === jobId);
+    updater((current) => ({
+      ...current,
+      jobId,
+      jobType: selectedJob?.jobType || current.jobType,
+      customerName: selectedJob?.customerName || current.customerName,
+    }));
+  }
 
   async function saveProfile() {
     if (!currentUser) return;
@@ -679,10 +1076,11 @@ export default function RestorationHoursTracker() {
     setLiveShift({
       startedAt: startedAt.toISOString(),
       date: formatDate(startedAt),
+      jobId: form.jobId || null,
       jobType: form.jobType,
       customerName: form.customerName || "",
     });
-    setForm((current) => ({ ...current, date: formatDate(startedAt), start: startedAt.toTimeString().slice(0, 5) }));
+    setForm((current) => ({ ...current, date: formatDate(startedAt), start: formatPhoenixTime(startedAt) }));
   }
 
   function stopLiveShiftAndFillForm() {
@@ -692,10 +1090,11 @@ export default function RestorationHoursTracker() {
     const startedAt = new Date(liveShift.startedAt);
     const reviewEntry = {
       date: formatDate(startedAt),
+      jobId: liveShift.jobId || form.jobId || null,
       jobType: liveShift.jobType || form.jobType,
       customerName: liveShift.customerName || form.customerName || "",
-      start: startedAt.toTimeString().slice(0, 5),
-      end: endedAt.toTimeString().slice(0, 5),
+      start: formatPhoenixTime(startedAt),
+      end: formatPhoenixTime(endedAt),
       lunchTaken: form.lunchTaken,
       lunchMinutes: form.lunchTaken ? Number(form.lunchMinutes || 0) : 0,
       notes: form.notes || "",
@@ -703,6 +1102,9 @@ export default function RestorationHoursTracker() {
       employeeSignature: form.employeeSignature || "",
     };
 
+    setReviewModal(null);
+    setEditModal(null);
+    setDayDetail(null);
     setStoppedShiftReview(reviewEntry);
     setForm((current) => ({ ...current, ...reviewEntry }));
     setLiveShift(null);
@@ -720,12 +1122,21 @@ export default function RestorationHoursTracker() {
   async function uploadJobPhoto(file) {
     if (!file || !currentUser) return;
     setAppError("");
-    const extension = file.name.split(".").pop() || "jpg";
-    const filePath = `${currentUser.id}/job-photo-${Date.now()}.${extension}`;
-    const { error: uploadError } = await supabase.storage.from("job-photos").upload(filePath, file, { upsert: true });
-    if (uploadError) return setAppError(uploadError.message);
-    const { data } = supabase.storage.from("job-photos").getPublicUrl(filePath);
-    setForm((current) => ({ ...current, photoUrl: data.publicUrl }));
+    setIsPhotoUploading(true);
+    try {
+      const uploadFile = await compressImageFile(file);
+      const extension = uploadFile.name.split(".").pop() || "jpg";
+      const filePath = `${currentUser.id}/job-photo-${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from("job-photos").upload(filePath, uploadFile, { upsert: true });
+      if (uploadError) return setAppError(uploadError.message);
+      const { data } = supabase.storage.from("job-photos").getPublicUrl(filePath);
+      setForm((current) => ({ ...current, photoUrl: data.publicUrl }));
+      notifyUser("Photo attached", "The job photo was compressed and added to this entry.");
+    } catch (error) {
+      setAppError(error.message || "Unable to upload photo.");
+    } finally {
+      setIsPhotoUploading(false);
+    }
   }
 
   async function syncOfflineQueue() {
@@ -746,16 +1157,20 @@ export default function RestorationHoursTracker() {
 
   function exportPayrollPdf() {
     const approved = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved");
-    const rows = approved.map((entry) => {
+    const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+    const renderRows = (weekEntries) => weekEntries.map((entry) => {
       const employee = employeeById.get(entry.employeeId)?.name || currentUser?.name || "Employee";
-      return `<tr><td>${employee}</td><td>${displayDate(entry.date)}</td><td>${entry.customerName}</td><td>${entry.start}–${entry.end}</td><td>${entryHours(entry).toFixed(2)}</td></tr>`;
+      return `<tr><td>${escapeHtml(employee)}</td><td>${escapeHtml(displayDate(entry.date))}</td><td>${escapeHtml(entry.customerName)}</td><td>${escapeHtml(entry.start)}–${escapeHtml(entry.end)}</td><td>${entryHours(entry).toFixed(2)}</td><td class="notes">${escapeHtml(entry.notes || "")}</td></tr>`;
     }).join("");
-    const html = `<!doctype html><html><head><title>VODA Payroll ${displayDate(weekStart)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:32px;color:#0f172a}h1{letter-spacing:-.04em}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{text-align:left;border-bottom:1px solid #e2e8f0;padding:12px;font-size:13px}.pill{display:inline-block;background:#ecfeff;color:#0e7490;border-radius:999px;padding:6px 12px;font-weight:800}</style></head><body><p class="pill">VODA Of Tucson</p><h1>Approved Payroll Report</h1><p>Week of ${displayDate(weekStart)} · Total approved hours: ${approved.reduce((sum, entry) => sum + entryHours(entry), 0).toFixed(2)}</p><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No approved entries for this week.</td></tr>'}</tbody></table></body></html>`;
+    const approvedWeekOne = approved.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const approvedWeekTwo = approved.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const approvedPeriodSummary = summarizePayroll(approved);
+    const html = `<!doctype html><html><head><title>VODA Payroll ${displayDate(weekStart)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:32px;color:#0f172a}h1{letter-spacing:-.04em;margin-bottom:8px}.pill{display:inline-block;background:#ecfeff;color:#0e7490;border-radius:999px;padding:6px 12px;font-weight:800}.summary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:22px 0}.box{border:1px solid #e2e8f0;border-radius:16px;padding:12px;background:#f8fafc}.box small{display:block;color:#64748b;font-weight:800;text-transform:uppercase;font-size:10px;letter-spacing:.12em}.box b{font-size:18px}h2{margin-top:28px}table{width:100%;border-collapse:collapse;margin-top:12px;table-layout:fixed}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #e2e8f0;padding:10px;font-size:12px}.notes{white-space:pre-wrap;word-break:break-word;width:30%}</style></head><body><p class="pill">VODA Of Tucson</p><h1>Approved Payroll Report</h1><p>Two-week pay period: ${displayDate(weekStart)} – ${displayDate(addDays(weekStart, 13))}</p><div class="summary"><div class="box"><small>Week 1</small><b>${summarizePayroll(approvedWeekOne).totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${summarizePayroll(approvedWeekTwo).totalHours.toFixed(2)}h</b></div><div class="box"><small>Period</small><b>${approvedPeriodSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${approvedPeriodSummary.regularHours.toFixed(2)}h</b></div><div class="box"><small>Overtime</small><b>${approvedPeriodSummary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${approvedPeriodSummary.vacationHours.toFixed(2)}h</b></div></div><h2>Week 1</h2><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead><tbody>${renderRows(approvedWeekOne) || '<tr><td colspan="6">No approved entries for Week 1.</td></tr>'}</tbody></table><h2>Week 2</h2><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead><tbody>${renderRows(approvedWeekTwo) || '<tr><td colspan="6">No approved entries for Week 2.</td></tr>'}</tbody></table></body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `voda-approved-payroll-${formatDate(weekStart)}.html`;
+    link.download = `voda-approved-payroll-pay-period-${formatDate(weekStart)}.html`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -765,9 +1180,14 @@ export default function RestorationHoursTracker() {
       setAppError("Please enter a job name or customer name before adding hours.");
       return;
     }
+    if (!form.notes.trim()) {
+      setAppError("Please add job notes before submitting hours. Employees must explain what was completed for the day.");
+      return;
+    }
     setAppError("");
     const payload = {
       employee_id: currentUser.id,
+      job_id: form.jobId || null,
       job_type: form.jobType,
       customer_name: form.customerName.trim(),
       work_date: form.date,
@@ -775,7 +1195,7 @@ export default function RestorationHoursTracker() {
       end_time: form.end,
       lunch_taken: form.lunchTaken,
       lunch_minutes: form.lunchTaken ? Number(form.lunchMinutes || 0) : 0,
-      notes: form.notes,
+      notes: form.notes.trim(),
       photo_url: form.photoUrl || null,
       employee_signature: form.employeeSignature || null,
       status: "pending",
@@ -784,7 +1204,8 @@ export default function RestorationHoursTracker() {
 
     if (!navigator.onLine) {
       setOfflineQueue((current) => [...current, payload]);
-      setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+      setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+      setActiveSection("timesheets");
       setAppError("You are offline, so this entry was saved locally and will sync when the connection returns.");
       return;
     }
@@ -792,7 +1213,8 @@ export default function RestorationHoursTracker() {
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) return setAppError(error.message);
     notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
-    setForm({ ...form, customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+    setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+    setActiveSection("timesheets");
     await loadAppData();
   }
 
@@ -802,11 +1224,16 @@ export default function RestorationHoursTracker() {
       setAppError("Please enter a job name or customer name before submitting the recorded shift.");
       return;
     }
+    if (!String(stoppedShiftReview.notes || "").trim()) {
+      setAppError("Please add job notes before submitting the recorded shift. Employees must explain what was completed for the day.");
+      return;
+    }
 
     setAppError("");
 
     const payload = {
       employee_id: currentUser.id,
+      job_id: stoppedShiftReview.jobId || null,
       job_type: stoppedShiftReview.jobType,
       customer_name: stoppedShiftReview.customerName.trim(),
       work_date: stoppedShiftReview.date,
@@ -814,7 +1241,7 @@ export default function RestorationHoursTracker() {
       end_time: stoppedShiftReview.end,
       lunch_taken: stoppedShiftReview.lunchTaken,
       lunch_minutes: stoppedShiftReview.lunchTaken ? Number(stoppedShiftReview.lunchMinutes || 0) : 0,
-      notes: stoppedShiftReview.notes || "",
+      notes: String(stoppedShiftReview.notes || "").trim(),
       photo_url: stoppedShiftReview.photoUrl || null,
       employee_signature: stoppedShiftReview.employeeSignature || null,
       status: "pending",
@@ -826,11 +1253,13 @@ export default function RestorationHoursTracker() {
       setStoppedShiftReview(null);
       setForm({
         ...form,
+        jobId: "",
         customerName: "",
         notes: "",
         photoUrl: "",
         employeeSignature: "",
       });
+      setActiveSection("timesheets");
       setAppError("You are offline, so this recorded shift was saved locally and will sync when the connection returns.");
       return;
     }
@@ -847,7 +1276,28 @@ export default function RestorationHoursTracker() {
       photoUrl: "",
       employeeSignature: "",
     });
+    setActiveSection("timesheets");
     await loadAppData();
+  }
+
+  function closeTransientPanels() {
+    setStoppedShiftReview(null);
+    setReviewModal(null);
+    setEditModal(null);
+    setDayDetail(null);
+  }
+
+  function goToSection(section) {
+    closeTransientPanels();
+    setAppError("");
+    setActiveSection(section);
+  }
+
+  function openDenyModal(entry) {
+    setStoppedShiftReview(null);
+    setEditModal(null);
+    setDayDetail(null);
+    setReviewModal({ entry, reason: "" });
   }
 
   async function captureGpsLocation() {
@@ -883,11 +1333,14 @@ export default function RestorationHoursTracker() {
         relatedEntryId: id,
       });
     }
-    setReviewModal(null);
+    closeTransientPanels();
     await loadAppData();
   }
 
   function openEditModal(entry) {
+    setStoppedShiftReview(null);
+    setReviewModal(null);
+    setDayDetail(null);
     setEditModal({
       id: entry.id,
       employeeName: employeeById.get(entry.employeeId)?.name || currentUser?.name || "Employee",
@@ -932,11 +1385,15 @@ export default function RestorationHoursTracker() {
         relatedEntryId: editModal.id,
       });
     }
-    setEditModal(null);
+    closeTransientPanels();
+    setActiveSection(currentUser?.role === "admin" ? "review" : "timesheets");
     await loadAppData();
   }
 
   function openDayDetail(dateValue, dayEntries = []) {
+    setStoppedShiftReview(null);
+    setReviewModal(null);
+    setEditModal(null);
     const dateKey = dateValue instanceof Date ? formatDate(dateValue) : String(dateValue);
     setDayDetail({
       date: dateKey,
@@ -944,44 +1401,172 @@ export default function RestorationHoursTracker() {
     });
   }
 
+
+  function openQuickAddForDate(dateValue) {
+    const dateKey = dateValue instanceof Date ? formatDate(dateValue) : String(dateValue);
+    setStoppedShiftReview(null);
+    setReviewModal(null);
+    setEditModal(null);
+    setDayDetail(null);
+    setForm((current) => ({
+      ...current,
+      date: dateKey,
+      jobId: "",
+      customerName: "",
+      notes: "",
+      photoUrl: "",
+      employeeSignature: "",
+    }));
+    setActiveSection("add");
+  }
+
+  function handleSwipeStart(event) {
+    swipeStartX.current = event.touches?.[0]?.clientX ?? null;
+  }
+
+  function handlePayPeriodSwipeEnd(event) {
+    if (swipeStartX.current === null) return;
+    const endX = event.changedTouches?.[0]?.clientX ?? swipeStartX.current;
+    const delta = endX - swipeStartX.current;
+    swipeStartX.current = null;
+    if (Math.abs(delta) < 56) return;
+    setWeekStart((current) => addDays(current, delta > 0 ? -14 : 14));
+  }
+
+  function handleHistorySwipeEnd(event) {
+    if (swipeStartX.current === null) return;
+    const endX = event.changedTouches?.[0]?.clientX ?? swipeStartX.current;
+    const delta = endX - swipeStartX.current;
+    swipeStartX.current = null;
+    if (Math.abs(delta) < 56) return;
+    setHistoryMonth((current) => addMonths(current, delta > 0 ? -1 : 1));
+  }
+
   function exportCsv(onlyApproved = false) {
     const source = onlyApproved ? visibleEntries.filter((entry) => entry.approvalStatus === "approved") : visibleEntries;
-    const rows = [
-      ["Employee", "Date", "Job", "Start", "End", "Lunch Taken", "Lunch Minutes", "Hours", "Approval Status", "Denial Reason", "Notes"],
-      ...source.map((entry) => {
-        const employeeName = entry.employeeId === currentUser?.id ? currentUser?.name : employeeById.get(entry.employeeId)?.name;
-        return [
-          employeeName || "Unknown",
-          entry.date,
-          entry.job,
-          entry.start,
-          entry.end,
-          entry.lunchTaken ? "Yes" : "No",
-          entry.lunchMinutes,
-          entryHours(entry).toFixed(2),
-          entry.approvalStatus,
-          (entry.denialReason || "").replaceAll(",", " "),
-          (entry.notes || "").replaceAll(",", " "),
-        ];
-      }),
+    const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const makeRows = (label, weekEntries, summary) => [
+      [label],
+      ["Employee", "Date", "Job Type", "Job / Customer", "Start", "End", "Lunch Taken", "Lunch Minutes", "Hours", "Approval Status", "Denial Reason", "Photo / Documentation Link", "Employee Signature", "Full Job Notes"],
+      ...weekEntries.map((entry) => [
+        getEmployeeName(entry.employeeId),
+        displayDate(entry.date),
+        entry.jobType,
+        entry.customerName,
+        entry.start,
+        entry.end,
+        entry.lunchTaken ? "Yes" : "No",
+        entry.lunchMinutes,
+        entryHours(entry).toFixed(2),
+        entry.approvalStatus,
+        entry.denialReason || "",
+        entry.photoUrl || "",
+        entry.employeeSignature || "",
+        entry.notes || "",
+      ]),
+      [],
+      ["Summary", "Total Hours", summary.totalHours.toFixed(2), "Regular Hours", summary.regularHours.toFixed(2), "Overtime Hours", summary.overtimeHours.toFixed(2), "Vacation Hours", summary.vacationHours.toFixed(2)],
+      [],
     ];
-    const blob = new Blob([rows.map((row) => row.join(",")).join("\n")], { type: "text/csv" });
+    const weekOneSource = source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const weekTwoSource = source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const periodSummary = summarizePayroll(source);
+    const rows = [
+      ["VODA Of Tucson Two-Week Timesheet + Job Notes Export"],
+      [`Pay Period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))}`],
+      [`Generated in Phoenix time (${APP_TIME_ZONE})`],
+      [currentUser?.role === "admin" ? `Admin view: ${selectedEmployeeId === "all" ? "All employees" : getEmployeeName(selectedEmployeeId)}` : `Employee view: ${currentUser?.name}`],
+      ["Pay Period Summary", "Total Hours", periodSummary.totalHours.toFixed(2), "Regular Hours", periodSummary.regularHours.toFixed(2), "Overtime Hours", periodSummary.overtimeHours.toFixed(2), "Vacation Hours", periodSummary.vacationHours.toFixed(2)],
+      [],
+      ...makeRows(`Week 1: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, weekOneSource, summarizePayroll(weekOneSource)),
+      ...makeRows(`Week 2: ${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, weekTwoSource, summarizePayroll(weekTwoSource)),
+    ];
+    const blob = new Blob([rows.map((row) => row.map(csvCell).join(",")).join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${onlyApproved ? "approved-payroll" : "restoration-hours"}-${formatDate(weekStart)}.csv`;
+    link.download = `${onlyApproved ? "approved-payroll" : "voda-job-notes"}-pay-period-${formatDate(weekStart)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
 
+  function exportDocumentationReport(onlyApproved = false) {
+    const source = onlyApproved ? visibleEntries.filter((entry) => entry.approvalStatus === "approved") : visibleEntries;
+    const weekOneSource = source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const weekTwoSource = source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const summary = summarizePayroll(source);
+    const renderEntryCard = (entry) => `
+      <article class="entry">
+        <div class="entry-head"><div><small>${escapeHtml(getEmployeeName(entry.employeeId))}</small><h3>${escapeHtml(entry.customerName)}</h3><p>${escapeHtml(entry.jobType)} • ${escapeHtml(displayDate(entry.date))} • ${escapeHtml(entry.start)}-${escapeHtml(entry.end)} • ${entryHours(entry).toFixed(2)} hrs</p></div><span class="status ${escapeHtml(String(entry.approvalStatus || "pending").toLowerCase())}">${escapeHtml(entry.approvalStatus || "pending")}</span></div>
+        <div class="meta"><span>Lunch: ${entry.lunchTaken ? `${escapeHtml(String(entry.lunchMinutes))} min` : "No"}</span><span>Signature: ${escapeHtml(entry.employeeSignature || "Not signed")}</span>${entry.denialReason ? `<span>Denial: ${escapeHtml(entry.denialReason)}</span>` : ""}</div>
+        ${entry.photoUrl ? `<p class="doc-link">Documentation link: ${escapeHtml(entry.photoUrl)}</p>` : ""}
+        <section class="notes"><small>Full Job Notes</small><p>${escapeHtml(entry.notes || "No notes submitted.")}</p></section>
+      </article>`;
+    const renderWeek = (title, entriesForWeek) => `<section class="week"><h2>${escapeHtml(title)}</h2>${entriesForWeek.length ? entriesForWeek.map(renderEntryCard).join("") : '<div class="empty">No entries for this week.</div>'}</section>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>VODA Job Documentation Export</title><style>
+      body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0;background:#f3f7f9;color:#0f172a;padding:28px}.shell{max-width:1120px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a,#164e63);color:white;border-radius:28px;padding:28px;box-shadow:0 22px 60px rgba(15,23,42,.18)}.pill{display:inline-block;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:7px 12px;font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}h1{margin:14px 0 8px;font-size:34px;letter-spacing:-.05em}.subtitle{color:#cffafe;font-weight:700}.summary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:18px 0}.box{background:white;border:1px solid #e2e8f0;border-radius:20px;padding:14px;box-shadow:0 8px 24px rgba(15,23,42,.06)}.box small,.notes small,.entry small{display:block;color:#64748b;font-weight:900;text-transform:uppercase;font-size:10px;letter-spacing:.14em}.box b{display:block;margin-top:5px;font-size:22px}.week{margin-top:22px}.week h2{letter-spacing:-.035em}.entry{break-inside:avoid;background:white;border:1px solid #dbeafe;border-radius:24px;padding:18px;margin:12px 0;box-shadow:0 12px 34px rgba(15,23,42,.07)}.entry-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.entry h3{margin:4px 0 4px;font-size:21px;letter-spacing:-.035em}.entry p{margin:0;color:#475569;font-weight:700}.status{border-radius:999px;padding:7px 10px;font-size:11px;text-transform:uppercase;font-weight:900;background:#fef3c7;color:#92400e}.status.approved{background:#dcfce7;color:#166534}.status.denied{background:#fee2e2;color:#991b1b}.meta{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.meta span,.doc-link{border-radius:14px;background:#f1f5f9;padding:8px 10px;color:#334155;font-size:12px;font-weight:800}.notes{margin-top:12px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:18px;padding:14px}.notes p{white-space:pre-wrap;word-break:break-word;overflow:visible;line-height:1.55;color:#0f172a}.empty{border:1px dashed #cbd5e1;border-radius:20px;padding:22px;text-align:center;color:#64748b;font-weight:800}@media print{body{background:white;padding:0}.hero,.entry,.box{box-shadow:none}.summary{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.entry-head{flex-direction:column}}
+    </style></head><body><main class="shell"><section class="hero"><span class="pill">VODA Of Tucson</span><h1>Job Documentation Export</h1><p class="subtitle">Two-week pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Phoenix time • ${currentUser?.role === "admin" ? (selectedEmployeeId === "all" ? "All employees" : escapeHtml(getEmployeeName(selectedEmployeeId))) : escapeHtml(currentUser?.name || "Employee")}</p></section><section class="summary"><div class="box"><small>Week 1</small><b>${summarizePayroll(weekOneSource).totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${summarizePayroll(weekTwoSource).totalHours.toFixed(2)}h</b></div><div class="box"><small>Period</small><b>${summary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${summary.regularHours.toFixed(2)}h</b></div><div class="box"><small>Overtime</small><b>${summary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${summary.vacationHours.toFixed(2)}h</b></div></section>${renderWeek(`Week 1: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, weekOneSource)}${renderWeek(`Week 2: ${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, weekTwoSource)}</main></body></html>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${onlyApproved ? "approved-" : ""}voda-job-documentation-${formatDate(weekStart)}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function updateEmployeeDraft(employeeId, updates) {
+    setEmployeeDrafts((current) => ({ ...current, [employeeId]: { ...(current[employeeId] || {}), ...updates } }));
+  }
+
+  async function saveEmployeeControls(employeeId) {
+    if (currentUser?.role !== "admin") return;
+    const draft = employeeDrafts[employeeId];
+    if (!draft) return;
+    setAppError("");
+    const { error } = await supabase.from("profiles").update({
+      role: draft.role || "employee",
+      active: draft.active !== false,
+      approval_status: draft.active === false ? "inactive" : "approved",
+      hourly_rate: draft.hourlyRate === "" || draft.hourlyRate === null ? null : Number(draft.hourlyRate),
+    }).eq("id", employeeId);
+    if (error) return setAppError(error.message);
+    await loadAppData();
+  }
+
+  async function createJobRecord() {
+    if (currentUser?.role !== "admin") return;
+    if (!jobForm.customerName.trim()) return setAppError("Add a customer or job name before creating a job.");
+    setAppError("");
+    const { error } = await supabase.from("app_jobs").insert({ customer_name: jobForm.customerName.trim(), job_number: jobForm.jobNumber.trim() || null, job_type: jobForm.jobType, address: jobForm.address.trim() || null, carrier: jobForm.carrier.trim() || null, claim_number: jobForm.claimNumber.trim() || null, assigned_employee_id: jobForm.assignedEmployeeId || null, status: "active", created_by: currentUser.id });
+    if (error) return setAppError(error.message);
+    setJobForm({ customerName: "", jobNumber: "", jobType: jobTypes[0], address: "", carrier: "", claimNumber: "", assignedEmployeeId: "" });
+    await loadAppData();
+  }
+
+  async function updateJobStatus(jobId, status) {
+    if (currentUser?.role !== "admin") return;
+    setAppError("");
+    const { error } = await supabase.from("app_jobs").update({ status }).eq("id", jobId);
+    if (error) return setAppError(error.message);
+    setJobs((current) => current.map((job) => job.id === jobId ? { ...job, status } : job));
+  }
+
   function createInviteDraft() {
     if (!inviteEmail.trim()) return setInviteNote("Enter an employee email first.");
-    setInviteNote(`Invite prepared for ${inviteEmail.trim()}. Create this user in Supabase Auth, then add their profile row with role employee.`);
+    setInviteNote(`Invite prepared for ${inviteEmail.trim()}. Create this user in Supabase Auth, then add their profile row with role employee. This panel can manage their role/status once the profile exists.`);
     setInviteEmail("");
   }
 
   if (authLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-white">Loading account...</div>;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-slate-950 px-4 text-white">
+        <div className="flex h-28 w-28 items-center justify-center rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
+          <img src={iconLogo} alt="VODA Logo" className="h-full w-full object-contain" />
+        </div>
+        <div className="flex flex-col items-center"><div className="mb-3 h-2 w-2 animate-pulse rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.9)]" /><p className="text-sm font-black uppercase tracking-[0.25em] text-cyan-300">Loading Portal</p></div>
+      </div>
+    );
   }
 
   if (!session || !currentUser) {
@@ -1036,10 +1621,34 @@ export default function RestorationHoursTracker() {
 
   return (
     <div className={cx("relative min-h-screen w-full overflow-x-hidden mobile-safe font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition-all duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")}>
+      <AnimatePresence>
+        {showSplash && (
+          <motion.div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <motion.div
+              className="flex flex-col items-center gap-5"
+              initial={{ opacity: 0, y: 14, scale: 0.92, filter: "blur(10px)" }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -10, scale: 1.04, filter: "blur(8px)" }}
+              transition={{ duration: 1.12, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <img src={brandLogo} alt="Voda Of Tucson" className="h-28 w-auto object-contain brightness-0 invert sm:h-36" />
+              <div className="h-1 w-28 overflow-hidden rounded-full bg-white/10">
+                <motion.div className="h-full rounded-full bg-cyan-300" initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 1.25, ease: "easeOut" }} />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="pointer-events-none fixed -left-28 top-20 h-80 w-80 rounded-full bg-cyan-300/14 blur-3xl" />
       <div className="pointer-events-none fixed -right-32 top-1/2 h-96 w-96 rounded-full bg-slate-600/12 blur-3xl" />
       <div className="relative mx-auto w-full max-w-[1540px] overflow-x-hidden px-3 py-3 sm:px-4 sm:py-4 lg:px-5 mobile-padding">
-        <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex max-w-full flex-col gap-3 overflow-hidden rounded-[1.6rem] border border-white/55 bg-slate-100/72 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
+        <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex max-w-full flex-col gap-3 overflow-hidden rounded-[1.6rem] border border-white/55 bg-white/74 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-cyan-700/10 ring-1 ring-white/80 sm:h-12 sm:w-12">
               <img src={iconLogo} alt="Voda icon" className="h-8 w-8 object-contain sm:h-9 sm:w-9" />
@@ -1064,9 +1673,11 @@ export default function RestorationHoursTracker() {
 
         {appError && <div className="mb-5 rounded-3xl border border-red-300 bg-red-100 p-4 text-sm font-black text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">{appError}</div>}
 
-        <PortalMessages messages={messages} employees={employees} currentUser={currentUser} messageForm={messageForm} setMessageForm={setMessageForm} sendAdminMessage={sendAdminMessage} />
+        <SectionNav activeSection={activeSection} setActiveSection={goToSection} isAdmin={currentUser.role === "admin"} />
 
-        <CapabilityDock
+        {activeSection === "updates" && <PortalMessages messages={messages} employees={employees} currentUser={currentUser} messageForm={messageForm} setMessageForm={setMessageForm} sendAdminMessage={sendAdminMessage} />}
+
+        {activeSection === "tools" && <CapabilityDock
           installPrompt={installPrompt}
           installApp={installApp}
           notificationPermission={notificationPermission}
@@ -1074,19 +1685,24 @@ export default function RestorationHoursTracker() {
           offlineQueue={offlineQueue}
           syncOfflineQueue={syncOfflineQueue}
           exportPayrollPdf={exportPayrollPdf}
+          exportDocumentationReport={exportDocumentationReport}
           isAdmin={currentUser.role === "admin"}
-        />
+        />}
 
         <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
-            <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-              <MetricCard icon={<Clock />} label="Weekly Hours" value={moneylessHours(weeklyTotal)} />
+            {activeSection === "dashboard" && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+              <MetricCard icon={<Clock />} label="Pay Period Total" value={moneylessHours(payPeriodSummary.totalHours)} />
+              <MetricCard icon={<CheckCircle2 />} label="Regular Hours" value={moneylessHours(payPeriodSummary.regularHours)} />
+              <MetricCard icon={<Activity />} label="Overtime Hours" value={moneylessHours(payPeriodSummary.overtimeHours)} />
+              <MetricCard icon={<CalendarDays />} label="Vacation Hours" value={moneylessHours(payPeriodSummary.vacationHours)} />
+              <MetricCard icon={<Clock />} label="Week 1 Total" value={moneylessHours(weekOneSummary.totalHours)} />
+              <MetricCard icon={<Clock />} label="Week 2 Total" value={moneylessHours(weekTwoSummary.totalHours)} />
               <MetricCard icon={<AlertCircle />} label="Pending" value={pendingCount} />
-              <MetricCard icon={<CheckCircle2 />} label="Approved Payroll" value={moneylessHours(approvedPayrollTotal)} />
               <MetricCard icon={<ShieldCheck />} label="Denied Hours" value={moneylessHours(deniedHoursTotal)} />
-            </div>
+            </div>}
 
-            <Card className="overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/25 dark:border-white/10">
+            <Card className={cx("overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/25 dark:border-white/10", !["dashboard", "timesheets"].includes(activeSection) && "hidden")}>
               <CardContent className="p-0">
                 <div className="relative overflow-hidden rounded-[2.25rem] bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.18),transparent_28%),linear-gradient(135deg,#111827,#1f2937_52%,#0f172a)]">
                   <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(255,255,255,.08),transparent_34%)]" />
@@ -1098,15 +1714,16 @@ export default function RestorationHoursTracker() {
                         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">Week of</p>
                       </div>
                       <h2 className="text-2xl font-black tracking-[-0.06em] text-white sm:text-4xl">{displayDate(weekStart)}</h2>
-                      <p className="mt-2 text-base font-extrabold tracking-[-0.03em] text-slate-300 sm:text-lg">Weekly Timesheet</p>
+                      <p className="mt-2 text-base font-extrabold tracking-[-0.03em] text-slate-300 sm:text-lg">Two-Week Timesheet</p>
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
 
-                    <div className="grid grid-cols-[54px_54px_1fr] gap-2 sm:flex sm:items-center sm:gap-3">
-                      <Button variant="outline" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))} className="h-14 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15"><ChevronLeft className="h-5 w-5" /></Button>
-                      <Button variant="outline" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, 7))} className="h-14 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15"><ChevronRight className="h-5 w-5" /></Button>
-                      <Button variant="cool" onClick={() => exportCsv(false)} className="h-14 gap-2 rounded-[1.25rem] px-5 text-base"><Download className="h-5 w-5" /> Export</Button>
-                      {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="h-14 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-5 text-white hover:bg-white/15"><FileText className="h-5 w-5" /> PDF</Button>}
+                    <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-3">
+                      <Button variant="outline" aria-label="Previous pay period" onClick={() => setWeekStart(addDays(weekStart, -14))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronLeft className="h-5 w-5" /></Button>
+                      <Button variant="outline" aria-label="Next pay period" onClick={() => setWeekStart(addDays(weekStart, 14))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronRight className="h-5 w-5" /></Button>
+                      <Button variant="cool" onClick={() => exportCsv(false)} className="h-12 gap-2 rounded-[1.25rem] px-4 text-sm sm:h-14 sm:px-5 sm:text-base"><Download className="h-5 w-5" /> CSV</Button>
+                      <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> Notes</Button>
+                      {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> PDF</Button>}
                     </div>
                   </div>
 
@@ -1126,24 +1743,24 @@ export default function RestorationHoursTracker() {
                             key={dateKey}
                             type="button"
                             onClick={() => openDayDetail(dateKey, dayEntries)}
-                            initial={{ opacity: 0, y: 14 }}
+                            initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.03, ...spring }}
                             className={cx(
-                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.25rem] border p-3 text-center shadow-xl backdrop-blur-2xl transition-all duration-300 ease-out will-change-transform sm:min-h-[242px]",
+                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.35rem] border p-3 pt-10 text-center shadow-xl backdrop-blur-2xl transition-all duration-500 ease-out will-change-transform sm:min-h-[242px]",
                               "border-white/15 bg-white/[0.075] hover:-translate-y-0.5 hover:bg-white/[0.105] hover:shadow-2xl hover:shadow-cyan-950/20",
                               isToday && "border-cyan-400/90 ring-2 ring-cyan-400/60"
                             )}
                           >
                             {isToday && (
-                              <span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-cyan-400 px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-950 shadow-lg shadow-cyan-500/25">
+                              <span className="absolute left-3 top-3 z-10 inline-flex h-6 min-w-[58px] items-center justify-center rounded-full border border-cyan-200/70 bg-cyan-400 px-3 text-[9px] font-black uppercase leading-none tracking-[0.08em] text-slate-950 shadow-lg shadow-cyan-500/25 sm:h-7 sm:min-w-[64px] sm:text-[10px]">
                                 Today
                               </span>
                             )}
 
-                            <div className="flex min-h-[64px] flex-col items-start justify-start gap-1 text-left">
+                            <div className="flex min-h-[58px] flex-col items-start justify-start gap-1 text-left">
                               <p className="text-[13px] font-black leading-none tracking-[-0.025em] text-white sm:text-[14px]">{shortDay}</p>
-                              <p className="whitespace-normal break-words text-[10px] font-extrabold leading-[1.15] text-slate-400 sm:text-[10.5px]">{displayDate(date)}</p>
+                              <p className="max-w-full truncate whitespace-nowrap text-[10px] font-extrabold leading-none text-slate-400 sm:text-[10.5px]">{displayDate(date)}</p>
                             </div>
 
                             <div className="my-3 h-px w-full bg-white/12" />
@@ -1199,16 +1816,52 @@ export default function RestorationHoursTracker() {
                     <div className="mt-5 flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-white/[0.06] px-5 py-4 text-slate-300">
                       <div className="flex items-center gap-3">
                         <span className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-300/30 text-cyan-300">i</span>
-                        <p className="text-sm font-bold sm:text-base">Click any day to view details, job entries, and time logs.</p>
+                        <p className="text-sm font-bold sm:text-base">Click any day to view details. The export keeps Week 1 and Week 2 separated on one worksheet.</p>
                       </div>
                       <ChevronRight className="hidden h-5 w-5 text-slate-400 sm:block" />
+                    </div>
+
+                    <div className="mt-4 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/[0.08] p-4 text-white">
+                      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">Payroll Summary</p>
+                          <h3 className="text-lg font-black tracking-[-0.03em]">Two-week pay period</h3>
+                        </div>
+                        <p className="text-xs font-bold text-slate-300">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                        <MiniStat label="Week 1" value={`${weekOneSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+                        <MiniStat label="Week 2" value={`${weekTwoSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+                        <MiniStat label="Period" value={`${payPeriodSummary.totalHours.toFixed(2)}h`} tone="emerald" />
+                        <MiniStat label="Regular" value={`${payPeriodSummary.regularHours.toFixed(2)}h`} tone="emerald" />
+                        <MiniStat label="Overtime" value={`${payPeriodSummary.overtimeHours.toFixed(2)}h`} tone="amber" />
+                        <MiniStat label="Vacation" value={`${payPeriodSummary.vacationHours.toFixed(2)}h`} tone="red" />
+                      </div>
                     </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {currentUser.role === "admin" && (
+            {currentUser.role === "admin" && activeSection === "manage" && (
+              <AdminControlCenter
+                employees={employees}
+                jobs={jobs}
+                inviteEmail={inviteEmail}
+                setInviteEmail={setInviteEmail}
+                inviteNote={inviteNote}
+                createInviteDraft={createInviteDraft}
+                employeeDrafts={employeeDrafts}
+                updateEmployeeDraft={updateEmployeeDraft}
+                saveEmployeeControls={saveEmployeeControls}
+                jobForm={jobForm}
+                setJobForm={setJobForm}
+                createJobRecord={createJobRecord}
+                updateJobStatus={updateJobStatus}
+              />
+            )}
+
+            {currentUser.role === "admin" && activeSection === "history" && (
               <Card>
                 <CardContent>
                   <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1247,7 +1900,7 @@ export default function RestorationHoursTracker() {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="text-[13px] font-black leading-none text-slate-900 dark:text-white">{date.getDate()}</p>
-                              <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">{date.toLocaleDateString(undefined, { weekday: "short" })}</p>
+                              <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">{new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE, weekday: "short" }).format(date)}</p>
                             </div>
                             {dayEntries.length > 0 && <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,.55)]" />}
                           </div>
@@ -1277,15 +1930,15 @@ export default function RestorationHoursTracker() {
               </Card>
             )}
 
-            <LiveShiftPanel
+            {["dashboard", "add"].includes(activeSection) && <LiveShiftPanel
               liveShift={liveShift}
               elapsed={liveShiftElapsed()}
               startLiveShift={startLiveShift}
               stopLiveShiftAndFillForm={stopLiveShiftAndFillForm}
               form={form}
-            />
+            />}
 
-            <Card>
+            {activeSection === "add" && <Card>
               <CardContent>
                 <div className="mb-5 flex items-center gap-3">
                   <div className="rounded-2xl bg-cyan-50 p-3 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200"><Plus className="h-5 w-5" /></div>
@@ -1293,26 +1946,48 @@ export default function RestorationHoursTracker() {
                 </div>
                 <div className="grid gap-2.5 md:grid-cols-2">
                   <Field label="Date"><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="input" /></Field>
+                  <Field label="Saved Job"><select value={form.jobId} onChange={(e) => applyJobSelection(e.target.value)} className="input"><option value="">Manual / one-time job</option>{activeJobs.map((job) => <option key={job.id} value={job.id}>{job.customerName}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</option>)}</select></Field>
                   <Field label="Job Type"><select value={form.jobType} onChange={(e) => setForm({ ...form, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
-                  <Field label="Job / Customer Name"><input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} className="input" placeholder="Example: Smith Residence" /></Field>
+                  <Field label="Job / Customer Name">
+                    <input
+                      list="weekly-job-suggestions"
+                      value={form.customerName}
+                      onChange={(e) => setForm({ ...form, customerName: e.target.value, jobId: "" })}
+                      className="input"
+                      placeholder="Example: Smith Residence"
+                    />
+                    <datalist id="weekly-job-suggestions">
+                      {smartJobSuggestions.map((job) => <option key={job} value={job} />)}
+                    </datalist>
+                    {smartJobSuggestions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {smartJobSuggestions.slice(0, 6).map((job) => (
+                          <button key={job} type="button" onClick={() => setForm({ ...form, customerName: job, jobId: "" })} className="bubble-fit rounded-full border border-cyan-200/70 bg-cyan-50/80 px-2.5 py-1.5 text-[10px] font-black text-cyan-800 transition hover:-translate-y-0.5 hover:bg-cyan-100 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200">
+                            {job}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {weeklyJobSuggestions.length > 0 && <p className="mt-2 text-xs font-bold text-cyan-700 dark:text-cyan-300">Top suggestions are jobs already entered earlier this same week.</p>}
+                  </Field>
                   <Field label="Start Time"><input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} className="input" /></Field>
                   <Field label="End Time"><input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className="input" /></Field>
                   <Field label="Lunch Break"><div className="flex gap-2"><Button type="button" variant={form.lunchTaken ? "cool" : "outline"} className="flex-1" onClick={() => setForm({ ...form, lunchTaken: true })}>Yes</Button><Button type="button" variant={!form.lunchTaken ? "default" : "outline"} className="flex-1" onClick={() => setForm({ ...form, lunchTaken: false, lunchMinutes: 0 })}>No</Button></div></Field>
                   <Field label="Lunch Minutes"><input type="number" min="0" value={form.lunchMinutes} disabled={!form.lunchTaken} onChange={(e) => setForm({ ...form, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
-                  <div className="md:col-span-2"><Field label="Notes"><textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input min-h-24 resize-none" placeholder="Add work notes, equipment used, or job progress..." /></Field></div>
-                  <Field label="Photo / Job Documentation"><div className="space-y-2"><div className="relative"><Camera className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} className="input pl-11" placeholder="Paste photo/job folder link or upload below" /></div><input type="file" accept="image/*" onChange={(e) => uploadJobPhoto(e.target.files?.[0])} className="block w-full rounded-2xl border border-slate-200 bg-white/70 p-2 text-xs font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300" /></div></Field>
+                  <div className="md:col-span-2"><Field label="Job Notes Required"><textarea required aria-required="true" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input min-h-28 resize-none" placeholder="Required: explain what you completed on this job today, equipment used, progress, or next steps..." /></Field><p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">Notes are required before hours can be submitted.</p></div>
+                  <Field label="Photo / Job Documentation"><div className="space-y-2"><div className="relative"><Camera className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} className="input pl-11" placeholder="Paste photo/job folder link or upload below" /></div>{form.photoUrl && <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/65 p-2 dark:border-white/10 dark:bg-white/5"><img src={form.photoUrl} alt="Job documentation preview" className="h-32 w-full rounded-xl object-cover" /></div>}<label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/60 p-3 text-xs font-black text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200"><Upload className="h-4 w-4" />{isPhotoUploading ? "Compressing + uploading..." : "Upload compressed photo"}<input type="file" accept="image/*" onChange={(e) => uploadJobPhoto(e.target.files?.[0])} className="hidden" disabled={isPhotoUploading} /></label></div></Field>
                   <div className="md:col-span-2"><Field label="Employee Signature / Confirmation"><div className="relative"><PenLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.employeeSignature} onChange={(e) => setForm({ ...form, employeeSignature: e.target.value })} className="input pl-11" placeholder="Type employee name to confirm this entry" /></div></Field></div>
                 </div>
                 <div className="mt-4 flex items-center justify-between rounded-3xl bg-gradient-to-br from-slate-900 to-slate-700 p-4 text-white shadow-xl shadow-slate-950/10 dark:from-slate-800 dark:to-cyan-950">
                   <div><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Calculated Entry</p><p className="text-2xl font-black">{entryHours(form).toFixed(2)} hrs</p></div>
-                  <Button onClick={addEntry} variant="outline" className="bg-white px-5 py-4 text-slate-950 hover:bg-cyan-50" disabled={appLoading}>Add Hours</Button>
+                  <Button onClick={addEntry} variant="outline" className="bg-white px-5 py-4 text-slate-950 hover:bg-cyan-50" disabled={appLoading || !form.customerName.trim() || !form.notes.trim()}>Add Hours</Button>
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
           </motion.section>
 
           <motion.aside {...softMotion} transition={{ ...spring, delay: 0.12 }} className="min-w-0 space-y-4 sm:space-y-5">
-            {currentUser.role === "admin" && (
+            {currentUser.role === "admin" && activeSection === "dashboard" && (
               <Card>
                 <CardContent>
                   <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Command Center</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">Payroll + Team Controls</h2></div><Sparkles className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
@@ -1330,7 +2005,39 @@ export default function RestorationHoursTracker() {
               </Card>
             )}
 
-            <Card>
+            {activeSection === "exports" && <DocumentationExportPanel
+              currentUser={currentUser}
+              employees={employees}
+              visibleEntries={visibleEntries}
+              selectedEmployeeId={selectedEmployeeId}
+              setSelectedEmployeeId={setSelectedEmployeeId}
+              search={search}
+              setSearch={setSearch}
+              employeeById={employeeById}
+              weekStart={weekStart}
+              setWeekStart={setWeekStart}
+              weekDates={weekDates}
+              weekTwoDates={weekTwoDates}
+              exportCsv={exportCsv}
+              exportDocumentationReport={exportDocumentationReport}
+              exportPayrollPdf={exportPayrollPdf}
+              openDayDetail={openDayDetail}
+            />}
+
+            {currentUser.role === "admin" && activeSection === "review" && <AdminApprovalQueue
+              approvalGroups={approvalGroups}
+              expandedApprovalGroups={expandedApprovalGroups}
+              toggleApprovalGroup={toggleApprovalGroup}
+              updateStatus={updateStatus}
+              setReviewModal={openDenyModal}
+              openEditModal={openEditModal}
+              setSelectedEmployeeId={setSelectedEmployeeId}
+              setActiveSection={goToSection}
+              search={search}
+              setSearch={setSearch}
+            />}
+
+            {(activeSection === "dashboard" || (activeSection === "review" && currentUser.role !== "admin")) && <Card>
               <CardContent>
                 <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Transparency Log</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">All Visible Entries</h2></div><CalendarDays className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
                 <div className="mb-4 grid gap-3 md:grid-cols-2">
@@ -1340,7 +2047,7 @@ export default function RestorationHoursTracker() {
 
                 {currentUser.role === "admin" && (
                   <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                    {employeeSummaries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm font-bold text-slate-500 sm:col-span-2 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No employee hours to review for this week.</div> : employeeSummaries.map((employee) => (
+                    {employeeSummaries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm font-bold text-slate-500 sm:col-span-2 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No employee hours to review for this pay period.</div> : employeeSummaries.map((employee) => (
                       <button key={employee.id} type="button" onClick={() => setSelectedEmployeeId(employee.id)} className="rounded-3xl border border-white/70 bg-white/75 p-4 text-left shadow-sm ring-1 ring-white/70 transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
                         <p className="text-sm font-black">{employee.name}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">Total: {employee.totalHours.toFixed(2)} hrs</p>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-black"><span className="rounded-2xl bg-amber-50 px-2 py-2 text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">{employee.pendingCount} pending</span><span className="rounded-2xl bg-emerald-50 px-2 py-2 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">{employee.approvedHours.toFixed(1)} approved</span><span className="rounded-2xl bg-red-100 px-2 py-2 text-red-800 shadow-sm dark:bg-red-500/20 dark:text-red-100">{employee.deniedHours.toFixed(1)} denied</span></div>
@@ -1350,44 +2057,45 @@ export default function RestorationHoursTracker() {
                 )}
 
                 <div className="space-y-3">
-                  {visibleEntries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No matching entries for this week.</div> : visibleEntries.map((entry) => {
+                  {visibleEntries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No matching entries for this pay period.</div> : visibleEntries.map((entry) => {
                     const employee = entry.employeeId === currentUser.id ? currentUser : employeeById.get(entry.employeeId);
                     return (
                       <div key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm transition duration-300 dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "border-slate-200 bg-slate-100/70 opacity-45 grayscale shadow-none dark:bg-white/5")}>
                         <div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-black">{entry.customerName}</p><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="text-xs text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
                         <EntryDetails entry={entry} employee={employee} />
                         {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
-                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => setReviewModal({ entry, reason: "" })}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
+                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
                       </div>
                     );
                   })}
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
 
-            <Card className="overflow-hidden border-slate-500/15 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-800 text-white shadow-2xl shadow-cyan-700/15">
+            {activeSection === "dashboard" && <Card className="overflow-hidden border-slate-500/15 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-800 text-white shadow-2xl shadow-cyan-700/15">
               <CardContent className="relative p-5"><div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-300/14 blur-2xl" /><img src={brandLogo} alt="Voda Of Tucson" className="mb-5 max-h-14 w-auto object-contain brightness-0 invert sm:max-h-16" /><BriefcaseBusiness className="mb-4 h-8 w-8 text-cyan-200" /><h2 className="text-xl font-black tracking-[-0.03em]">Built for Voda Of Tucson field teams.</h2><p className="mt-2 text-sm leading-6 text-cyan-50">Track daily hours by job, verify lunch breaks, and keep weekly payroll transparent between employees and management.</p></CardContent>
-            </Card>
+            </Card>}
           </motion.aside>
         </main>
       </div>
 
       {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} />}
-      {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} />}
+      {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} activeJobs={activeJobs} jobs={jobs} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
-      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={setReviewModal} />}
+      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={openDenyModal} openQuickAddForDate={openQuickAddForDate} />}
       <style>{inputStyles}</style>
     </div>
   );
 }
 
 
-function CapabilityDock({ installPrompt, installApp, notificationPermission, requestNotifications, offlineQueue, syncOfflineQueue, exportPayrollPdf, isAdmin }) {
+function CapabilityDock({ installPrompt, installApp, notificationPermission, requestNotifications, offlineQueue, syncOfflineQueue, exportPayrollPdf, exportDocumentationReport, isAdmin }) {
   const online = typeof navigator === "undefined" ? true : navigator.onLine;
   const items = [
     { icon: online ? <Wifi /> : <WifiOff />, label: online ? "Online" : "Offline", value: offlineQueue.length ? `${offlineQueue.length} queued` : "Synced", action: offlineQueue.length ? syncOfflineQueue : null },
     { icon: <Bell />, label: "Notifications", value: notificationPermission === "granted" ? "Enabled" : "Enable", action: notificationPermission !== "granted" && notificationPermission !== "unsupported" ? requestNotifications : null },
+    { icon: <FileText />, label: "Job Notes", value: "Export", action: () => exportDocumentationReport(false) },
     ...(isAdmin ? [{ icon: <FileText />, label: "Payroll PDF", value: "Export", action: exportPayrollPdf }] : []),
   ];
 
@@ -1432,7 +2140,16 @@ function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFi
   );
 }
 
-function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitRecordedShift }) {
+function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitRecordedShift, activeJobs = [], jobs = [] }) {
+  function applyRecordedJob(jobId) {
+    const selectedJob = jobs.find((job) => job.id === jobId);
+    setStoppedShiftReview((current) => ({
+      ...current,
+      jobId,
+      jobType: selectedJob?.jobType || current.jobType,
+      customerName: selectedJob?.customerName || current.customerName,
+    }));
+  }
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
       <motion.div
@@ -1451,13 +2168,14 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Date"><input type="date" value={stoppedShiftReview.date} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, date: e.target.value })} className="input" /></Field>
+          <Field label="Saved Job"><select value={stoppedShiftReview.jobId || ""} onChange={(e) => applyRecordedJob(e.target.value)} className="input"><option value="">Manual / one-time job</option>{activeJobs.map((job) => <option key={job.id} value={job.id}>{job.customerName}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</option>)}</select></Field>
           <Field label="Job Type"><select value={stoppedShiftReview.jobType} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
-          <div className="sm:col-span-2"><Field label="Job / Customer Name"><input value={stoppedShiftReview.customerName} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, customerName: e.target.value })} className="input" placeholder="Example: Smith Residence" /></Field></div>
+          <div><Field label="Job / Customer Name"><input value={stoppedShiftReview.customerName} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, customerName: e.target.value })} className="input" placeholder="Example: Smith Residence" /></Field></div>
           <Field label="Start Time"><input type="time" value={stoppedShiftReview.start} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, start: e.target.value })} className="input" /></Field>
           <Field label="End Time"><input type="time" value={stoppedShiftReview.end} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, end: e.target.value })} className="input" /></Field>
           <Field label="Lunch Break"><div className="flex gap-2"><Button type="button" variant={stoppedShiftReview.lunchTaken ? "cool" : "outline"} className="flex-1" onClick={() => setStoppedShiftReview({ ...stoppedShiftReview, lunchTaken: true })}>Yes</Button><Button type="button" variant={!stoppedShiftReview.lunchTaken ? "default" : "outline"} className="flex-1" onClick={() => setStoppedShiftReview({ ...stoppedShiftReview, lunchTaken: false, lunchMinutes: 0 })}>No</Button></div></Field>
           <Field label="Lunch Minutes"><input type="number" min="0" value={stoppedShiftReview.lunchMinutes} disabled={!stoppedShiftReview.lunchTaken} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
-          <div className="sm:col-span-2"><Field label="Notes"><textarea value={stoppedShiftReview.notes} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, notes: e.target.value })} className="input min-h-28 resize-none" placeholder="Add work notes before submitting..." /></Field></div>
+          <div className="sm:col-span-2"><Field label="Job Notes Required"><textarea required aria-required="true" value={stoppedShiftReview.notes} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, notes: e.target.value })} className="input min-h-32 resize-none" placeholder="Required: explain what you completed on this job today before submitting..." /></Field><p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">Notes are required before this recorded shift can be submitted.</p></div>
           <div className="sm:col-span-2"><Field label="Employee Signature / Confirmation"><div className="relative"><PenLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={stoppedShiftReview.employeeSignature} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, employeeSignature: e.target.value })} className="input pl-11" placeholder="Type your name to confirm this recorded shift" /></div></Field></div>
         </div>
 
@@ -1469,14 +2187,105 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
 
         <div className="mt-5 grid grid-cols-2 gap-2">
           <Button variant="outline" onClick={() => setStoppedShiftReview(null)} className="py-3">Cancel</Button>
-          <Button variant="cool" onClick={submitRecordedShift} className="py-3"><Send className="mr-2 h-4 w-4" /> Submit Hours</Button>
+          <Button variant="cool" onClick={submitRecordedShift} className="py-3" disabled={!stoppedShiftReview.customerName.trim() || !String(stoppedShiftReview.notes || "").trim()}><Send className="mr-2 h-4 w-4" /> Submit Hours</Button>
         </div>
       </motion.div>
     </div>
   );
 }
 
-function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, updateStatus, openEditModal, setReviewModal }) {
+
+function DocumentationExportPanel({ currentUser, employees, visibleEntries, selectedEmployeeId, setSelectedEmployeeId, search, setSearch, employeeById, weekStart, setWeekStart, weekDates, weekTwoDates, exportCsv, exportDocumentationReport, exportPayrollPdf, openDayDetail }) {
+  const weekOneEntries = visibleEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+  const weekTwoEntries = visibleEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+  const periodSummary = summarizePayroll(visibleEntries);
+  const weekOneSummary = summarizePayroll(weekOneEntries);
+  const weekTwoSummary = summarizePayroll(weekTwoEntries);
+  const noteCount = visibleEntries.filter((entry) => String(entry.notes || "").trim()).length;
+  const documentationCount = visibleEntries.filter((entry) => entry.photoUrl || entry.employeeSignature || String(entry.notes || "").trim()).length;
+  const groupedDays = [...weekDates, ...weekTwoDates].map((date) => {
+    const dateKey = formatDate(date);
+    return { date, dateKey, entries: visibleEntries.filter((entry) => entry.date === dateKey) };
+  }).filter((group) => group.entries.length > 0);
+  const getName = (employeeId) => employeeId === currentUser?.id ? currentUser?.name : employeeById.get(employeeId)?.name || "Unknown Employee";
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-900 p-5 text-white sm:p-6">
+          <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-cyan-300/15 blur-3xl" />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Job documentation export</p>
+              <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">Clean two-week notes review</h2>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Full job notes stay expanded, Week 1 and Week 2 stay separated, and payroll totals are ready for admin review or employee records.</p>
+              <p className="mt-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-200">Phoenix time • {displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+              <Button variant="outline" onClick={() => setWeekStart(addDays(weekStart, -14))} className="border-white/15 bg-white/10 text-white hover:bg-white/15"><ChevronLeft className="mr-1 h-4 w-4" /> Prev</Button>
+              <Button variant="outline" onClick={() => setWeekStart(getMonday(new Date()))} className="border-white/15 bg-white/10 text-white hover:bg-white/15">Current</Button>
+              <Button variant="outline" onClick={() => setWeekStart(addDays(weekStart, 14))} className="border-white/15 bg-white/10 text-white hover:bg-white/15">Next <ChevronRight className="ml-1 h-4 w-4" /></Button>
+              <Button variant="cool" onClick={() => exportDocumentationReport(false)}><FileText className="mr-2 h-4 w-4" /> Export Notes</Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5 p-4 sm:p-5">
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto_auto]">
+            {currentUser.role === "admin" && <select aria-label="Filter documentation by employee" value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="input"><option value="all">All employees</option>{employees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>}
+            <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search job documentation" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search job, notes, employee..." /></div>
+            <Button variant="outline" onClick={() => exportCsv(false)} className="min-h-[48px]"><Download className="mr-2 h-4 w-4" /> CSV</Button>
+            {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Payroll PDF</Button>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-8">
+            <MiniStat label="Week 1" value={`${weekOneSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+            <MiniStat label="Week 2" value={`${weekTwoSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+            <MiniStat label="Period" value={`${periodSummary.totalHours.toFixed(2)}h`} tone="emerald" />
+            <MiniStat label="Regular" value={`${periodSummary.regularHours.toFixed(2)}h`} tone="emerald" />
+            <MiniStat label="Overtime" value={`${periodSummary.overtimeHours.toFixed(2)}h`} tone="amber" />
+            <MiniStat label="Vacation" value={`${periodSummary.vacationHours.toFixed(2)}h`} tone="red" />
+            <MiniStat label="Notes" value={noteCount} tone="cyan" />
+            <MiniStat label="Docs" value={documentationCount} tone="cyan" />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <DocumentationWeek title={`Week 1 • ${displayShortDate(weekStart)} – ${displayShortDate(addDays(weekStart, 6))}`} entries={weekOneEntries} getName={getName} openDayDetail={openDayDetail} />
+            <DocumentationWeek title={`Week 2 • ${displayShortDate(addDays(weekStart, 7))} – ${displayShortDate(addDays(weekStart, 13))}`} entries={weekTwoEntries} getName={getName} openDayDetail={openDayDetail} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DocumentationWeek({ title, entries, getName, openDayDetail }) {
+  return (
+    <section className="rounded-[1.65rem] border border-white/70 bg-white/72 p-4 shadow-sm ring-1 ring-white/70 dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">{title}</p><h3 className="text-lg font-black tracking-[-0.03em]">{entries.length} documented entries</h3></div>
+      </div>
+      <div className="space-y-3">
+        {entries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-white/60 p-6 text-center text-sm font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No entries found for this week.</div> : entries.map((entry) => (
+          <article key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "opacity-60 grayscale")}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0"><p className="text-sm font-black text-slate-950 dark:text-white">{entry.customerName}</p><p className="mt-0.5 text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType} · {getName(entry.employeeId)}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p></div>
+              <StatusPill status={entry.approvalStatus} />
+            </div>
+            <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
+              <p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Full Job Notes</p>
+              <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-700 dark:text-slate-200">{entry.notes || "No notes submitted."}</p>
+            </div>
+            {(entry.photoUrl || entry.employeeSignature || entry.denialReason) && <div className="mt-3 grid gap-2 text-xs font-bold text-slate-600 dark:text-slate-300">{entry.photoUrl && <a className="rounded-2xl bg-cyan-50 px-3 py-2 text-cyan-700 underline dark:bg-cyan-400/10 dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">Open photo/job documentation</a>}{entry.employeeSignature && <p className="rounded-2xl bg-slate-50 px-3 py-2 dark:bg-white/5">Signed: {entry.employeeSignature}</p>}{entry.denialReason && <p className="rounded-2xl bg-red-50 px-3 py-2 text-red-700 dark:bg-red-500/10 dark:text-red-100">Denied reason: {entry.denialReason}</p>}</div>}
+            <Button size="sm" variant="ghost" onClick={() => openDayDetail(entry.date, entries.filter((item) => item.date === entry.date))} className="mt-3 w-full">Open day details</Button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, updateStatus, openEditModal, setReviewModal, openQuickAddForDate }) {
   const dayEntries = dayDetail.entries || [];
   const activeEntries = dayEntries.filter((entry) => !isDeniedEntry(entry));
   const deniedEntries = dayEntries.filter((entry) => isDeniedEntry(entry));
@@ -1486,9 +2295,10 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
       <motion.div
-        initial={{ opacity: 0, y: 22, scale: 0.96 }}
+        initial={{ opacity: 0, y: 26, scale: 0.965 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={spring}
+        exit={{ opacity: 0, y: 18, scale: 0.97 }}
+        transition={smoothSpring}
         className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-white/70 bg-slate-50/95 p-4 shadow-2xl shadow-slate-950/25 ring-1 ring-white/80 backdrop-blur-2xl sm:p-5 dark:border-white/10 dark:bg-slate-900/95 dark:ring-white/10"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -1497,7 +2307,10 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
             <h2 className="mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">{displayDate(dayDetail.date)}</h2>
             <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Full job and hours breakdown for this date.</p>
           </div>
-          <Button variant="ghost" onClick={() => setDayDetail(null)}><X className="h-5 w-5" /></Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="cool" onClick={() => openQuickAddForDate(dayDetail.date)}><Plus className="h-4 w-4" /> Quick Add</Button>
+            <Button variant="ghost" onClick={() => setDayDetail(null)}><X className="h-5 w-5" /></Button>
+          </div>
         </div>
 
         <div className="mb-4 grid grid-cols-3 gap-2">
@@ -1536,7 +2349,7 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
                 {currentUser?.role === "admin" && (
                   <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5">
                     <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
-                    <Button size="sm" variant="danger" onClick={() => setReviewModal({ entry, reason: "" })}>Deny</Button>
+                    <Button size="sm" variant="danger" onClick={() => setReviewModal(entry)}>Deny</Button>
                     <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button>
                   </div>
                 )}
@@ -1603,7 +2416,7 @@ function PortalMessages({ messages, employees, currentUser, messageForm, setMess
               <div key={message.id} className="rounded-3xl border border-white/70 bg-white/75 p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
                 <p className="text-sm font-black">{message.title}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{message.body}</p>
-                <p className="mt-3 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{message.recipientId === "all" ? "All employees" : recipient?.name || "Employee"} · {message.createdAt ? new Date(message.createdAt).toLocaleDateString() : "New"}</p>
+                <p className="mt-3 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{message.recipientId === "all" ? "All employees" : recipient?.name || "Employee"} · {message.createdAt ? new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE }).format(new Date(message.createdAt)) : "New"}</p>
               </div>
             );
           })}
@@ -1666,7 +2479,7 @@ function MiniStat({ label, value, tone }) {
     amber: "text-amber-700 dark:text-amber-200",
     red: "text-red-700 dark:text-red-200",
   };
-  return <div className="rounded-3xl bg-white/75 p-4 shadow-sm ring-1 ring-white/80 dark:bg-white/5 dark:ring-white/10"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{label}</p><p className={cx("mt-1 text-2xl font-black", tones[tone])}>{value}</p></div>;
+  return <div className="min-w-0 rounded-3xl bg-white/75 p-3 shadow-sm ring-1 ring-white/80 sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="break-words text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-slate-400 sm:text-xs">{label}</p><p className={cx("mt-1 break-words text-xl font-black leading-tight sm:text-2xl", tones[tone])}>{value}</p></div>;
 }
 
 function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError }) {
@@ -1709,7 +2522,7 @@ const inputStyles = `
     width: 100%;
     border-radius: 1rem;
     border: 1px solid rgb(203 213 225 / .92);
-    background: rgba(248,250,252,.78);
+    background: rgba(255,255,255,.88);
     padding: .78rem .9rem;
     font-size: .875rem;
     font-weight: 700;
@@ -1811,6 +2624,34 @@ input,
 textarea,
 select {
   max-width: 100%;
+}
+
+.bubble-fit,
+.bubble-fit * {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.15;
+}
+
+.rounded-full,
+.rounded-2xl,
+.rounded-3xl,
+[class*="rounded-"] {
+  min-width: 0;
+}
+
+.ios-glass { transform: translateZ(0); }
+.ios-glass:hover { box-shadow: 0 24px 70px rgba(15, 23, 42, .12); }
+@supports (-webkit-touch-callout: none) { .ios-glass { -webkit-backdrop-filter: blur(22px); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; } }
+@media (max-width: 480px) {
+  .bubble-fit {
+    font-size: clamp(0.62rem, 2.7vw, 0.78rem);
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
+  }
 }
 
 @media (max-width: 768px) {
