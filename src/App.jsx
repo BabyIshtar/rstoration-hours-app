@@ -352,7 +352,7 @@ function Button({ children, className = "", variant = "default", size = "default
   return (
     <button
       className={cx(
-        "bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-2xl text-center font-bold leading-none tracking-[-0.01em] whitespace-nowrap transition-all duration-500 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
+        "bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-2xl text-center font-bold leading-tight tracking-[-0.01em] transition-all duration-500 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
         variants[variant] || variants.default,
         sizes[size] || sizes.default,
         className
@@ -382,7 +382,7 @@ function StatusPill({ status }) {
     denied: "bg-red-100 text-red-800 border-red-300 shadow-sm dark:bg-red-500/20 dark:text-red-100 dark:border-red-300/20",
   };
 
-  return <span className={cx("bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center rounded-full border px-2.5 py-1 text-center text-[10px] font-black leading-none capitalize whitespace-nowrap sm:text-xs", styles[normalized] || styles.pending)}>{normalized}</span>;
+  return <span className={cx("bubble-fit inline-flex max-w-full min-w-0 shrink-0 items-center justify-center rounded-full border px-2.5 py-1 text-center text-[10px] font-black leading-tight capitalize sm:text-xs", styles[normalized] || styles.pending)}>{normalized}</span>;
 }
 
 function Field({ label, children }) {
@@ -428,7 +428,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
           return (
             <button key={item.id} type="button" onClick={() => setActiveSection(item.id)} className={cx("bubble-fit flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[1.15rem] px-2 py-3 text-center text-[9.5px] font-black uppercase leading-none tracking-[0.04em] transition-all duration-500 sm:min-h-[70px] sm:text-[10.5px]", selected ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 dark:bg-white dark:text-slate-950" : "bg-white/55 text-slate-500 hover:bg-white hover:text-slate-950 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white")}>
               {React.cloneElement(item.icon, { className: "h-4 w-4" })}
-              <span className="block max-w-full truncate leading-none">{item.label}</span>
+              <span className="block max-w-full text-balance leading-tight">{item.label}</span>
             </button>
           );
         })}
@@ -669,6 +669,7 @@ export default function RestorationHoursTracker() {
   const [showSplash, setShowSplash] = useState(false);
   const [isPhotoUploading, setIsPhotoUploading] = useState(false);
   const swipeStartX = useRef(null);
+  const refreshStartY = useRef(null);
   const loginTip = useMemo(() => loginTips[Math.floor(Math.random() * loginTips.length)], []);
 
   const [employees, setEmployees] = useState([]);
@@ -1429,6 +1430,23 @@ export default function RestorationHoursTracker() {
     setActiveSection("add");
   }
 
+
+  function handleRefreshTouchStart(event) {
+    if (window.scrollY > 4) {
+      refreshStartY.current = null;
+      return;
+    }
+    refreshStartY.current = event.touches?.[0]?.clientY ?? null;
+  }
+
+  function handleRefreshTouchEnd(event) {
+    if (refreshStartY.current === null || appLoading) return;
+    const endY = event.changedTouches?.[0]?.clientY ?? refreshStartY.current;
+    const pulledDown = endY - refreshStartY.current > 84;
+    refreshStartY.current = null;
+    if (pulledDown) loadAppData();
+  }
+
   function handleSwipeStart(event) {
     swipeStartX.current = event.touches?.[0]?.clientX ?? null;
   }
@@ -1629,7 +1647,7 @@ export default function RestorationHoursTracker() {
   }
 
   return (
-    <div className={cx("relative min-h-screen w-full overflow-x-hidden mobile-safe font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition-all duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")}>
+    <div className={cx("relative min-h-screen w-full overflow-x-hidden mobile-safe font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition-all duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")} onTouchStart={handleRefreshTouchStart} onTouchEnd={handleRefreshTouchEnd}>
       <AnimatePresence>
         {showSplash && (
           <motion.div
@@ -1670,7 +1688,7 @@ export default function RestorationHoursTracker() {
           <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
             <div className="col-span-2 flex items-center gap-2 rounded-2xl border border-white/70 bg-slate-50/75 px-3 py-2.5 text-xs font-bold shadow-sm sm:col-span-1 sm:text-sm dark:border-white/10 dark:bg-white/10">
               <AvatarBadge person={currentUser} />
-              <div><span>{currentUser.name}</span><span className="mx-2 text-slate-300">/</span><span className="capitalize text-cyan-600 dark:text-cyan-300">{currentUser.role}</span></div>
+              <div className="min-w-0 break-words leading-tight"><span>{currentUser.name}</span><span className="mx-2 text-slate-300">/</span><span className="capitalize text-cyan-600 dark:text-cyan-300">{currentUser.role}</span></div>
             </div>
             <Button variant="outline" onClick={() => setSettingsOpen(true)} className="gap-2"><Settings className="h-4 w-4" /> Settings</Button>
             <Button variant="outline" onClick={() => setDarkMode((value) => !value)} className="gap-2">
@@ -1681,6 +1699,7 @@ export default function RestorationHoursTracker() {
         </motion.header>
 
         {appError && <div className="mb-5 rounded-3xl border border-red-300 bg-red-100 p-4 text-sm font-black text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">{appError}</div>}
+        {appLoading && <div className="mb-4 rounded-3xl border border-cyan-200/70 bg-cyan-50/75 p-3 text-center text-xs font-black uppercase tracking-[0.16em] text-cyan-800 shadow-sm dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200">Syncing latest hours...</div>}
 
         <SectionNav activeSection={activeSection} setActiveSection={goToSection} isAdmin={currentUser.role === "admin"} />
 
@@ -1700,7 +1719,11 @@ export default function RestorationHoursTracker() {
 
         <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
-            {activeSection === "dashboard" && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+            {activeSection === "dashboard" && appLoading && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+              {Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} />)}
+            </div>}
+
+            {activeSection === "dashboard" && !appLoading && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
               <MetricCard icon={<Clock />} label="Pay Period Total" value={moneylessHours(payPeriodSummary.totalHours)} />
               <MetricCard icon={<CheckCircle2 />} label="Regular Hours" value={moneylessHours(payPeriodSummary.regularHours)} />
               <MetricCard icon={<Activity />} label="Overtime Hours" value={moneylessHours(payPeriodSummary.overtimeHours)} />
@@ -1775,7 +1798,7 @@ export default function RestorationHoursTracker() {
 
                             <div className="flex min-h-[58px] flex-col items-start justify-start gap-1 text-left">
                               <p className="text-[13px] font-black leading-none tracking-[-0.025em] text-white sm:text-[14px]">{shortDay}</p>
-                              <p className="max-w-full truncate whitespace-nowrap text-[10px] font-extrabold leading-none text-slate-400 sm:text-[10.5px]">{displayDate(date)}</p>
+                              <p className="max-w-full text-[10px] font-extrabold leading-tight text-slate-400 sm:text-[10.5px]">{displayDate(date)}</p>
                             </div>
 
                             <div className="my-3 h-px w-full bg-white/12" />
@@ -1806,8 +1829,8 @@ export default function RestorationHoursTracker() {
                                     >
                                       <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                          <p className={cx("truncate text-[10px] font-black tracking-[-0.02em] text-white", isDeniedEntry(entry) && "text-red-100")}>{entry.customerName}</p>
-                                          <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{entry.start}–{entry.end}</p>
+                                          <p className={cx("line-clamp-2 break-words text-[10px] font-black leading-tight tracking-[-0.02em] text-white", isDeniedEntry(entry) && "text-red-100")}>{entry.customerName}</p>
+                                          <p className="mt-0.5 break-words text-[9px] font-bold leading-tight text-slate-400">{entry.start}–{entry.end}</p>
                                         </div>
                                         <span className={cx("shrink-0 rounded-full bg-cyan-400/12 px-1.5 py-0.5 text-[9px] font-black text-cyan-200", isDeniedEntry(entry) && "bg-red-400/15 text-red-100")}>{isDeniedEntry(entry) ? "Denied" : `${entryHours(entry).toFixed(2)}h`}</span>
                                       </div>
@@ -2081,7 +2104,7 @@ export default function RestorationHoursTracker() {
                         <div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-black">{entry.customerName}</p><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="text-xs text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
                         <EntryDetails entry={entry} employee={employee} />
                         {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
-                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
+                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-1 gap-2 rounded-2xl sm:grid-cols-3 border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
                       </div>
                     );
                   })}
@@ -2364,7 +2387,7 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
                 )}
 
                 {currentUser?.role === "admin" && (
-                  <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5">
+                  <div className="mt-3 grid grid-cols-1 gap-2 rounded-2xl sm:grid-cols-3 border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5">
                     <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
                     <Button size="sm" variant="danger" onClick={() => setReviewModal(entry)}>Deny</Button>
                     <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button>
@@ -2481,7 +2504,7 @@ function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOp
           </div>
         </div>
 
-        <div className="mt-5 flex gap-2">
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
           <Button variant="outline" onClick={() => setSettingsOpen(false)} className="flex-1 py-3">Cancel</Button>
           <Button variant="cool" onClick={saveProfile} className="flex-1 py-3">Save Profile</Button>
         </div>
@@ -2506,7 +2529,7 @@ function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError })
         <p className="text-xs font-black uppercase tracking-[0.24em] text-red-600 dark:text-red-300">Private admin review</p><h2 className="mt-1 text-2xl font-black tracking-[-0.03em]">Deny hours?</h2><p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-400">This reason will only be visible to admins and the employee who submitted the entry.</p>
         <div className="mt-4 rounded-3xl bg-white/80 p-4 text-sm shadow-sm dark:bg-white/5"><p className="font-black">{reviewModal.entry.customerName}</p><p className="text-slate-500 dark:text-slate-400">{displayDate(reviewModal.entry.date)} · {entryHours(reviewModal.entry).toFixed(2)} hrs</p></div>
         <textarea value={reviewModal.reason} onChange={(e) => setReviewModal((current) => ({ ...current, reason: e.target.value }))} className="input mt-4 min-h-32 resize-none" placeholder="Example: Clocked out after leaving the jobsite / wrong job selected / hours do not match schedule." />
-        <div className="mt-4 flex gap-2"><Button type="button" variant="outline" onClick={() => setReviewModal(null)} className="flex-1 py-3">Cancel</Button><Button type="button" variant="danger" className="flex-1 py-3" onClick={() => { const reason = (reviewModal.reason || "").trim(); if (!reason) return setAppError("Please enter a denial reason before denying hours."); updateStatus(reviewModal.entry.id, "denied", reason); }}>Deny Entry</Button></div>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button type="button" variant="outline" onClick={() => setReviewModal(null)} className="flex-1 py-3">Cancel</Button><Button type="button" variant="danger" className="flex-1 py-3" onClick={() => { const reason = (reviewModal.reason || "").trim(); if (!reason) return setAppError("Please enter a denial reason before denying hours."); updateStatus(reviewModal.entry.id, "denied", reason); }}>Deny Entry</Button></div>
       </motion.div>
     </div>
   );
@@ -2528,8 +2551,18 @@ function EditHoursModal({ editModal, setEditModal, saveEditedHours }) {
           <div className="sm:col-span-2"><Field label="Admin Notes / Correction Reason"><textarea value={editModal.notes} onChange={(e) => setEditModal({ ...editModal, notes: e.target.value })} className="input min-h-28 resize-none" /></Field></div>
         </div>
         <div className="mt-4 rounded-3xl bg-slate-900 p-4 text-white dark:bg-white/10"><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Corrected Total</p><p className="text-2xl font-black">{entryHours(editModal).toFixed(2)} hrs</p><p className="mt-1 text-xs font-bold text-slate-300">Saving edits returns this entry to pending so it can be reviewed again.</p></div>
-        <div className="mt-4 flex gap-2"><Button variant="outline" onClick={() => setEditModal(null)} className="flex-1 py-3">Cancel</Button><Button variant="cool" onClick={saveEditedHours} className="flex-1 py-3"><Edit3 className="mr-2 h-4 w-4" /> Save Changes</Button></div>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button variant="outline" onClick={() => setEditModal(null)} className="flex-1 py-3">Cancel</Button><Button variant="cool" onClick={saveEditedHours} className="flex-1 py-3"><Edit3 className="mr-2 h-4 w-4" /> Save Changes</Button></div>
       </motion.div>
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="ios-glass min-h-[112px] rounded-[1.6rem] border border-white/60 bg-white/55 p-4 shadow-xl shadow-slate-950/8 ring-1 ring-white/45 dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
+      <div className="h-10 w-10 animate-pulse rounded-2xl bg-slate-200/80 dark:bg-white/10" />
+      <div className="mt-4 h-3 w-24 animate-pulse rounded-full bg-slate-200/80 dark:bg-white/10" />
+      <div className="mt-2 h-6 w-20 animate-pulse rounded-full bg-slate-300/80 dark:bg-white/15" />
     </div>
   );
 }
@@ -2695,4 +2728,42 @@ select {
     min-width: 0;
   }
 }
+
+  /* Goddard professional typography + wrapping patch */
+  :root {
+    --voda-text-wrap: pretty;
+  }
+  .text-balance { text-wrap: balance; }
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  p, h1, h2, h3, h4, h5, h6, span, div, button, label {
+    overflow-wrap: anywhere;
+  }
+  h1, h2, h3 { text-wrap: balance; }
+  p, label, button, .input { text-wrap: pretty; }
+  button, .bubble-fit, .bubble-fit * {
+    white-space: normal !important;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    hyphens: auto;
+  }
+  .bubble-fit svg, button svg {
+    flex: 0 0 auto;
+  }
+  .calendar-entry-row {
+    min-width: 0;
+  }
+  @media (max-width: 640px) {
+    h1 { font-size: clamp(1.45rem, 7vw, 2.15rem); line-height: .95; }
+    h2 { font-size: clamp(1.1rem, 5vw, 1.55rem); line-height: 1.05; }
+    .input { font-size: 16px; }
+    button { line-height: 1.12; }
+  }
+
 `;
