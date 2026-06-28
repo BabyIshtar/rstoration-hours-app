@@ -454,7 +454,7 @@ function EntryDetails({ entry, employee }) {
 }
 
 
-function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleApprovalGroup, updateStatus, setReviewModal, openEditModal, setSelectedEmployeeId, setActiveSection, search, setSearch }) {
+function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleApprovalGroup, updateStatus, approveAllPending, setReviewModal, openEditModal, setSelectedEmployeeId, setActiveSection, search, setSearch }) {
   const pendingTotal = approvalGroups.reduce((sum, group) => sum + group.entries.length, 0);
   const pendingHours = approvalGroups.reduce((sum, group) => sum + group.totalHours, 0);
 
@@ -473,8 +473,9 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
           </div>
         </div>
 
-        <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
           <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search pending approvals" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search pending jobs, notes, or employees..." /></div>
+          <Button type="button" variant="success" onClick={approveAllPending} disabled={!pendingTotal} className="min-h-12">Approve All Pending</Button>
           <Button type="button" variant="outline" onClick={() => { setSelectedEmployeeId("all"); setActiveSection("history"); }} className="min-h-12">Find Approved / History</Button>
         </div>
 
@@ -497,7 +498,7 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
                       <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{entries.length} pending · {totalHours.toFixed(2)} hrs awaiting review</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 dark:border-amber-300/15 dark:bg-amber-400/10 dark:text-amber-200">{entries.length}</span>
                     <ChevronRight className={cx("h-5 w-5 text-slate-400 transition-transform", isOpen && "rotate-90")} />
                   </div>
@@ -505,6 +506,10 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
 
                 {isOpen && (
                   <div className="space-y-3 border-t border-slate-100 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-slate-950/20 sm:p-4">
+                    <div className="flex flex-col gap-2 rounded-2xl border border-emerald-200/70 bg-emerald-50/80 p-3 dark:border-emerald-300/15 dark:bg-emerald-400/10 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xs font-black text-emerald-800 dark:text-emerald-100">Approve all {entries.length} pending entries for {employee.name}</p>
+                      <Button size="sm" variant="success" onClick={() => approveAllPending(entries)}>Approve Employee</Button>
+                    </div>
                     {entries.map((entry) => (
                       <article key={entry.id} className="rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/35">
                         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -584,7 +589,7 @@ function AdminControlCenter({
                 const isActive = draft.active !== false;
                 return (
                   <div key={employee.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
-                    <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <p className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{employee.name}</p>
                         <p className="clean-wrap text-xs font-bold leading-snug text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
@@ -1347,6 +1352,36 @@ export default function RestorationHoursTracker() {
     await loadAppData();
   }
 
+  async function approveAllPendingEntries(entriesToApprove = pendingApprovalEntries) {
+    setAppError("");
+    const pendingEntries = entriesToApprove.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase()));
+    if (!pendingEntries.length) return;
+
+    const ids = pendingEntries.map((entry) => entry.id).filter(Boolean);
+    const reviewedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("time_entries")
+      .update({
+        approval_status: "approved",
+        status: "approved",
+        reviewed_at: reviewedAt,
+        denial_reason: null,
+      })
+      .in("id", ids);
+
+    if (error) return setAppError(error.message);
+
+    await Promise.allSettled(pendingEntries.map((entry) => createPortalMessage({
+      recipientId: entry.employeeId,
+      title: "Hours approved",
+      body: `${entry.customerName} on ${displayDate(entry.date)} was approved.`,
+      relatedEntryId: entry.id,
+    })));
+
+    closeTransientPanels();
+    await loadAppData();
+  }
+
   function openEditModal(entry) {
     setStoppedShiftReview(null);
     setReviewModal(null);
@@ -2069,6 +2104,7 @@ export default function RestorationHoursTracker() {
               expandedApprovalGroups={expandedApprovalGroups}
               toggleApprovalGroup={toggleApprovalGroup}
               updateStatus={updateStatus}
+              approveAllPending={approveAllPendingEntries}
               setReviewModal={openDenyModal}
               openEditModal={openEditModal}
               setSelectedEmployeeId={setSelectedEmployeeId}
@@ -2101,7 +2137,7 @@ export default function RestorationHoursTracker() {
                     const employee = entry.employeeId === currentUser.id ? currentUser : employeeById.get(entry.employeeId);
                     return (
                       <div key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm transition duration-300 dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "border-slate-200 bg-slate-100/70 opacity-45 grayscale shadow-none dark:bg-white/5")}>
-                        <div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-black">{entry.customerName}</p><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="text-xs text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
+                        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-black">{entry.customerName}</p><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="text-xs text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
                         <EntryDetails entry={entry} employee={employee} />
                         {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
                         {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-1 gap-2 rounded-2xl sm:grid-cols-3 border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
@@ -2341,19 +2377,19 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
         transition={smoothSpring}
         className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-white/70 bg-slate-50/95 p-4 shadow-2xl shadow-slate-950/25 ring-1 ring-white/80 backdrop-blur-2xl sm:p-5 dark:border-white/10 dark:bg-slate-900/95 dark:ring-white/10"
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Day detail</p>
             <h2 className="mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">{displayDate(dayDetail.date)}</h2>
             <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Full job and hours breakdown for this date.</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
             <Button variant="cool" onClick={() => openQuickAddForDate(dayDetail.date)}><Plus className="h-4 w-4" /> Quick Add</Button>
             <Button variant="ghost" onClick={() => setDayDetail(null)}><X className="h-5 w-5" /></Button>
           </div>
         </div>
 
-        <div className="mb-4 grid grid-cols-3 gap-2">
+        <div className="mb-4 grid grid-cols-1 gap-2 xs:grid-cols-3 sm:grid-cols-3">
           <MiniStat label="Active" value={`${totalHours.toFixed(2)}h`} tone="cyan" />
           <MiniStat label="Approved" value={`${approvedHours.toFixed(2)}h`} tone="emerald" />
           <MiniStat label="Denied" value={`${deniedEntries.length}`} tone="red" />
@@ -2367,8 +2403,8 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
           ) : dayEntries.map((entry) => {
             const employee = entry.employeeId === currentUser?.id ? currentUser : employeeById.get(entry.employeeId);
             return (
-              <div key={entry.id} className={cx("rounded-3xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5", isDeniedEntry(entry) && "bg-slate-100/65 opacity-60 grayscale dark:bg-white/[0.035]")}> 
-                <div className="mb-3 flex items-start justify-between gap-3">
+              <div key={entry.id} className={cx("min-w-0 rounded-3xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5", isDeniedEntry(entry) && "bg-slate-100/65 opacity-60 grayscale dark:bg-white/[0.035]")}> 
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="clean-wrap text-base font-black leading-snug tracking-[-0.02em] text-slate-950 dark:text-white">{entry.customerName}</p>
                     <p className="text-xs font-black uppercase tracking-[0.1em] text-cyan-700 dark:text-cyan-300">{entry.jobType}</p>
@@ -2519,7 +2555,7 @@ function MiniStat({ label, value, tone }) {
     amber: "text-amber-700 dark:text-amber-200",
     red: "text-red-700 dark:text-red-200",
   };
-  return <div className="min-w-0 rounded-3xl bg-white/75 p-3 shadow-sm ring-1 ring-white/80 sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="break-words text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-slate-400 sm:text-xs">{label}</p><p className={cx("mt-1 break-words text-xl font-black leading-tight sm:text-2xl", tones[tone])}>{value}</p></div>;
+  return <div className="min-w-0 rounded-3xl bg-white/75 p-3 shadow-sm ring-1 ring-white/80 sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="min-w-0 whitespace-normal text-[10px] font-black uppercase leading-tight tracking-[0.06em] text-slate-400 sm:text-xs">{label}</p><p className={cx("mt-1 min-w-0 whitespace-normal text-xl font-black leading-tight tracking-[-0.02em] sm:text-2xl", tones[tone])}>{value}</p></div>;
 }
 
 function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError }) {
