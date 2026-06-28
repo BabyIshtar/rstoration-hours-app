@@ -65,6 +65,23 @@ button svg { flex-shrink: 0; }
   hyphens: none;
 }
 
+.note-wrap {
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-height: 1.45;
+}
+
+.card-safe-text,
+.daily-hours-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;

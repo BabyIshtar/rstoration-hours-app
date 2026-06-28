@@ -126,18 +126,6 @@ function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function nl2br(value) {
-  return escapeHtml(value).replace(/\n/g, "<br />");
-}
-
 const APP_TIME_ZONE = "America/Phoenix";
 const PHOENIX_OFFSET = "-07:00";
 
@@ -334,7 +322,7 @@ function normalizeEntry(entry) {
     end: String(entry.end_time || "").slice(0, 5),
     lunchTaken: Boolean(entry.lunch_taken),
     lunchMinutes: Number(entry.lunch_minutes || 0),
-    notes: entry.notes || entry.job_notes || entry.note || entry.description || "",
+    notes: entry.notes || "",
     status: approvalStatus,
     approvalStatus,
     denialReason: entry.denial_reason || "",
@@ -451,13 +439,13 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
 
 function EntryDetails({ entry, employee }) {
   return (
-    <div className="grid gap-2 rounded-2xl bg-slate-50/80 p-3 text-xs font-semibold text-slate-600 sm:grid-cols-2 dark:bg-white/5 dark:text-slate-300">
-      <p className="flex items-center gap-2"><UserRound className="h-3.5 w-3.5" /> {employee?.name || "Employee"}</p>
-      <p className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> {entryHours(entry).toFixed(2)} total hrs</p>
-      <p className="sm:col-span-2">Lunch: {entry.lunchTaken ? `${entry.lunchMinutes} min` : "No lunch break"}</p>
-      {entry.notes && <div className="sm:col-span-2 rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-white/10 dark:bg-slate-950/30"><p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Job Notes</p><p className="whitespace-pre-wrap break-words leading-5 text-slate-700 dark:text-slate-200">{entry.notes}</p></div>}
+    <div className="grid min-w-0 gap-2 rounded-2xl bg-slate-50/80 p-3 text-xs font-semibold text-slate-600 sm:grid-cols-2 dark:bg-white/5 dark:text-slate-300">
+      <p className="clean-wrap flex min-w-0 items-center gap-2 leading-snug"><UserRound className="h-3.5 w-3.5 shrink-0" /> <span className="min-w-0 break-normal">{employee?.name || "Employee"}</span></p>
+      <p className="clean-wrap flex min-w-0 items-center gap-2 leading-snug"><Clock className="h-3.5 w-3.5 shrink-0" /> <span className="min-w-0 break-normal">{entryHours(entry).toFixed(2)} total hrs</span></p>
+      <p className="clean-wrap sm:col-span-2 leading-snug">Lunch: {entry.lunchTaken ? `${entry.lunchMinutes} min` : "No lunch break"}</p>
+      {entry.notes && <div className="min-w-0 sm:col-span-2 rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-white/10 dark:bg-slate-950/30"><p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Job Notes</p><p className="note-wrap leading-5 text-slate-700 dark:text-slate-200">{entry.notes}</p></div>}
       {entry.approvalStatus === "denied" && entry.denialReason && (
-        <p className="sm:col-span-2 rounded-2xl border border-red-300 bg-red-100 p-3 font-black text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">
+        <p className="note-wrap sm:col-span-2 rounded-2xl border border-red-300 bg-red-100 p-3 font-black leading-snug text-red-800 shadow-sm dark:border-red-300/20 dark:bg-red-500/20 dark:text-red-100">
           Denial reason: {entry.denialReason}
         </p>
       )}
@@ -466,7 +454,7 @@ function EntryDetails({ entry, employee }) {
 }
 
 
-function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleApprovalGroup, updateStatus, approveAllPending, setReviewModal, openEditModal, setSelectedEmployeeId, setActiveSection, search, setSearch }) {
+function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleApprovalGroup, updateStatus, approveAllPendingEntries, setReviewModal, openEditModal, setSelectedEmployeeId, setActiveSection, search, setSearch, approvingAll }) {
   const pendingTotal = approvalGroups.reduce((sum, group) => sum + group.entries.length, 0);
   const pendingHours = approvalGroups.reduce((sum, group) => sum + group.totalHours, 0);
 
@@ -487,7 +475,7 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
 
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
           <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search pending approvals" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search pending jobs, notes, or employees..." /></div>
-          <Button type="button" variant="success" onClick={approveAllPending} disabled={!pendingTotal} className="min-h-12">Approve All Pending</Button>
+          <Button type="button" variant="success" disabled={!pendingTotal || approvingAll} onClick={approveAllPendingEntries} className="min-h-12">{approvingAll ? "Approving..." : `Approve All (${pendingTotal})`}</Button>
           <Button type="button" variant="outline" onClick={() => { setSelectedEmployeeId("all"); setActiveSection("history"); }} className="min-h-12">Find Approved / History</Button>
         </div>
 
@@ -510,7 +498,7 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
                       <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{entries.length} pending · {totalHours.toFixed(2)} hrs awaiting review</p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex items-center gap-2">
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 dark:border-amber-300/15 dark:bg-amber-400/10 dark:text-amber-200">{entries.length}</span>
                     <ChevronRight className={cx("h-5 w-5 text-slate-400 transition-transform", isOpen && "rotate-90")} />
                   </div>
@@ -518,17 +506,13 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
 
                 {isOpen && (
                   <div className="space-y-3 border-t border-slate-100 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-slate-950/20 sm:p-4">
-                    <div className="flex flex-col gap-2 rounded-2xl border border-emerald-200/70 bg-emerald-50/80 p-3 dark:border-emerald-300/15 dark:bg-emerald-400/10 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs font-black text-emerald-800 dark:text-emerald-100">Approve all {entries.length} pending entries for {employee.name}</p>
-                      <Button size="sm" variant="success" onClick={() => approveAllPending(entries)}>Approve Employee</Button>
-                    </div>
                     {entries.map((entry) => (
-                      <article key={entry.id} className="rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/35">
-                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <p className="text-sm font-black text-slate-950 dark:text-white">{entry.customerName}</p>
-                            <p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p>
-                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p>
+                      <article key={entry.id} className="min-w-0 rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/35">
+                        <div className="mb-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{entry.customerName}</p>
+                            <p className="clean-wrap text-xs font-bold leading-snug text-cyan-700 dark:text-cyan-300">{entry.jobType}</p>
+                            <p className="clean-wrap text-xs font-semibold leading-snug text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p>
                           </div>
                           <StatusPill status={entry.approvalStatus} />
                         </div>
@@ -601,7 +585,7 @@ function AdminControlCenter({
                 const isActive = draft.active !== false;
                 return (
                   <div key={employee.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
-                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="mb-3 flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{employee.name}</p>
                         <p className="clean-wrap text-xs font-bold leading-snug text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
@@ -950,6 +934,7 @@ export default function RestorationHoursTracker() {
   const pendingCount = visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())).length;
   const approvedPayrollTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
   const deniedHoursTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "denied").reduce((sum, entry) => sum + entryHours(entry), 0);
+  const [approvingAll, setApprovingAll] = useState(false);
   const pendingApprovalEntries = useMemo(() => visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())), [visibleEntries]);
   const approvalGroups = useMemo(() => {
     if (currentUser?.role !== "admin") return [];
@@ -1184,71 +1169,22 @@ export default function RestorationHoursTracker() {
 
   function exportPayrollPdf() {
     const approved = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved");
-    const weekOneSource = approved.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
-    const weekTwoSource = approved.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
-    const periodSummary = summarizePayroll(approved);
-
-    const buildJobGroups = (entriesForWeek) => {
-      const groups = new Map();
-      entriesForWeek.forEach((entry) => {
-        const employee = getEmployeeName(entry.employeeId);
-        const job = entry.customerName || "Unnamed Job";
-        const key = `${employee}__${job}__${entry.jobType}`;
-        if (!groups.has(key)) {
-          groups.set(key, { employee, job, jobType: entry.jobType || "Other", entries: [], total: 0, notes: [] });
-        }
-        const group = groups.get(key);
-        group.entries.push(entry);
-        group.total += entryHours(entry);
-        if (String(entry.notes || "").trim()) group.notes.push({ date: entry.date, text: entry.notes });
-      });
-      return Array.from(groups.values()).sort((a, b) => `${a.employee} ${a.job}`.localeCompare(`${b.employee} ${b.job}`));
-    };
-
-    const renderJobGroup = (group) => `
-      <article class="job-card">
-        <div class="job-header">
-          <div>
-            <p class="eyebrow">${escapeHtml(group.employee)}</p>
-            <h3>${escapeHtml(group.job)}</h3>
-            <p class="muted">${escapeHtml(group.jobType)}</p>
-          </div>
-          <div class="total-box"><span>Total</span><b>${group.total.toFixed(2)} hrs</b></div>
-        </div>
-        <table>
-          <thead><tr><th>Date</th><th>Time</th><th>Lunch</th><th>Hours</th><th>Status</th></tr></thead>
-          <tbody>${group.entries.map((entry) => `<tr><td>${escapeHtml(displayDate(entry.date))}</td><td>${escapeHtml(entry.start)} - ${escapeHtml(entry.end)}</td><td>${entry.lunchTaken ? `${escapeHtml(entry.lunchMinutes)} min` : "No"}</td><td>${entryHours(entry).toFixed(2)}</td><td>${escapeHtml(entry.approvalStatus || "pending")}</td></tr>`).join("")}</tbody>
-        </table>
-        <section class="notes-block">
-          <p class="eyebrow">Job Notes</p>
-          ${group.notes.length ? group.notes.map((note) => `<div class="note"><b>${escapeHtml(displayShortDate(note.date))}</b><p>${nl2br(note.text)}</p></div>`).join("") : `<p class="empty-note">No notes submitted for this job.</p>`}
-        </section>
-      </article>`;
-
-    const renderWeek = (label, range, entriesForWeek) => {
-      const summary = summarizePayroll(entriesForWeek);
-      const groups = buildJobGroups(entriesForWeek);
-      return `<section class="week-section"><div class="week-title"><div><p class="eyebrow">${escapeHtml(range)}</p><h2>${escapeHtml(label)}</h2></div><div class="week-hours">${summary.totalHours.toFixed(2)} hrs</div></div>${groups.length ? groups.map(renderJobGroup).join("") : `<div class="empty">No approved entries for this week.</div>`}</section>`;
-    };
-
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>VODA Payroll PDF</title><style>
-      *{box-sizing:border-box}body{margin:0;background:#eef3f6;color:#0f172a;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.page{max-width:1020px;margin:0 auto;padding:34px}.cover{background:linear-gradient(135deg,#07111f,#0f2f3e 62%,#155e75);color:white;border-radius:28px;padding:30px 32px;margin-bottom:22px}.brand{font-size:12px;font-weight:900;letter-spacing:.24em;text-transform:uppercase;color:#a5f3fc}.cover h1{font-size:38px;line-height:1;margin:10px 0 8px;letter-spacing:-.06em}.cover p{margin:0;color:#d2f5fb;font-weight:700}.summary-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:18px 0 26px}.stat{background:white;border:1px solid #dbe7ee;border-radius:18px;padding:14px}.stat span,.eyebrow{display:block;font-size:10px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#64748b}.stat b{display:block;margin-top:5px;font-size:22px;letter-spacing:-.04em}.week-section{margin-top:26px}.week-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:12px}.week-title h2{margin:2px 0 0;font-size:24px;letter-spacing:-.04em}.week-hours{border-radius:999px;background:#0f172a;color:white;padding:9px 13px;font-weight:900}.job-card{break-inside:avoid;background:white;border:1px solid #dbe7ee;border-radius:22px;padding:18px;margin:14px 0}.job-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.job-header h3{font-size:21px;line-height:1.1;margin:4px 0 4px;letter-spacing:-.04em}.muted{margin:0;color:#475569;font-weight:700}.total-box{text-align:right;border:1px solid #cffafe;background:#ecfeff;border-radius:16px;padding:10px 12px;min-width:112px}.total-box span{display:block;color:#0e7490;font-size:10px;font-weight:900;text-transform:uppercase}.total-box b{display:block;color:#0f172a;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:14px;table-layout:auto}th{background:#f8fafc;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.12em}th,td{text-align:left;border-bottom:1px solid #e2e8f0;padding:9px 8px;vertical-align:top;font-size:12px}.notes-block{margin-top:14px;border:1px solid #dbe7ee;background:#f8fafc;border-radius:18px;padding:14px}.note{margin-top:10px;border-left:3px solid #0891b2;padding-left:10px}.note b{font-size:12px;color:#0e7490}.note p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:13px;color:#0f172a}.empty,.empty-note{border:1px dashed #cbd5e1;border-radius:18px;padding:16px;text-align:center;color:#64748b;font-weight:800;background:white}@media print{body{background:white}.page{padding:18px;max-width:none}.cover{border-radius:0;margin:-18px -18px 20px}.job-card,.stat{break-inside:avoid}.summary-grid{grid-template-columns:repeat(5,1fr)}}
-    </style></head><body><main class="page"><section class="cover"><div class="brand">VODA Of Tucson</div><h1>Approved Payroll Report</h1><p>Pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Generated in Phoenix time • ${selectedEmployeeId === "all" ? "All employees" : escapeHtml(getEmployeeName(selectedEmployeeId))}</p></section><section class="summary-grid"><div class="stat"><span>Week 1</span><b>${summarizePayroll(weekOneSource).totalHours.toFixed(2)}h</b></div><div class="stat"><span>Week 2</span><b>${summarizePayroll(weekTwoSource).totalHours.toFixed(2)}h</b></div><div class="stat"><span>Period</span><b>${periodSummary.totalHours.toFixed(2)}h</b></div><div class="stat"><span>Regular</span><b>${periodSummary.regularHours.toFixed(2)}h</b></div><div class="stat"><span>Overtime</span><b>${periodSummary.overtimeHours.toFixed(2)}h</b></div></section>${renderWeek("Week 1", `${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, weekOneSource)}${renderWeek("Week 2", `${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, weekTwoSource)}</main><script>window.onload=()=>setTimeout(()=>window.print(),350);</script></body></html>`;
-
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800");
-    if (!printWindow) {
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `voda-payroll-report-${formatDate(weekStart)}.html`;
-      link.click();
-      URL.revokeObjectURL(url);
-      return;
-    }
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+    const renderRows = (weekEntries) => weekEntries.map((entry) => {
+      const employee = employeeById.get(entry.employeeId)?.name || currentUser?.name || "Employee";
+      return `<tr><td>${escapeHtml(employee)}</td><td>${escapeHtml(displayDate(entry.date))}</td><td>${escapeHtml(entry.customerName)}</td><td>${escapeHtml(entry.start)}–${escapeHtml(entry.end)}</td><td>${entryHours(entry).toFixed(2)}</td><td class="notes">${escapeHtml(entry.notes || "")}</td></tr>`;
+    }).join("");
+    const approvedWeekOne = approved.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const approvedWeekTwo = approved.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const approvedPeriodSummary = summarizePayroll(approved);
+    const html = `<!doctype html><html><head><title>VODA Payroll ${displayDate(weekStart)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:32px;color:#0f172a}h1{letter-spacing:-.04em;margin-bottom:8px}.pill{display:inline-block;background:#ecfeff;color:#0e7490;border-radius:999px;padding:6px 12px;font-weight:800}.summary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:22px 0}.box{border:1px solid #e2e8f0;border-radius:16px;padding:12px;background:#f8fafc}.box small{display:block;color:#64748b;font-weight:800;text-transform:uppercase;font-size:10px;letter-spacing:.12em}.box b{font-size:18px}h2{margin-top:28px}table{width:100%;border-collapse:collapse;margin-top:12px;table-layout:fixed}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #e2e8f0;padding:10px;font-size:12px}.notes{white-space:pre-wrap;word-break:break-word;width:30%}</style></head><body><p class="pill">VODA Of Tucson</p><h1>Approved Payroll Report</h1><p>Two-week pay period: ${displayDate(weekStart)} – ${displayDate(addDays(weekStart, 13))}</p><div class="summary"><div class="box"><small>Week 1</small><b>${summarizePayroll(approvedWeekOne).totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${summarizePayroll(approvedWeekTwo).totalHours.toFixed(2)}h</b></div><div class="box"><small>Period</small><b>${approvedPeriodSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${approvedPeriodSummary.regularHours.toFixed(2)}h</b></div><div class="box"><small>Overtime</small><b>${approvedPeriodSummary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${approvedPeriodSummary.vacationHours.toFixed(2)}h</b></div></div><h2>Week 1</h2><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead><tbody>${renderRows(approvedWeekOne) || '<tr><td colspan="6">No approved entries for Week 1.</td></tr>'}</tbody></table><h2>Week 2</h2><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead><tbody>${renderRows(approvedWeekTwo) || '<tr><td colspan="6">No approved entries for Week 2.</td></tr>'}</tbody></table></body></html>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `voda-approved-payroll-pay-period-${formatDate(weekStart)}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function addEntry() {
@@ -1413,34 +1349,28 @@ export default function RestorationHoursTracker() {
     await loadAppData();
   }
 
-  async function approveAllPendingEntries(entriesToApprove = pendingApprovalEntries) {
-    setAppError("");
-    const pendingEntries = entriesToApprove.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase()));
-    if (!pendingEntries.length) return;
 
-    const ids = pendingEntries.map((entry) => entry.id).filter(Boolean);
-    const reviewedAt = new Date().toISOString();
+
+  async function approveAllPendingEntries() {
+    setAppError("");
+    const ids = pendingApprovalEntries.map((entry) => entry.id).filter(Boolean);
+    if (!ids.length) return;
+    setApprovingAll(true);
     const { error } = await supabase
       .from("time_entries")
       .update({
         approval_status: "approved",
         status: "approved",
-        reviewed_at: reviewedAt,
+        reviewed_at: new Date().toISOString(),
         denial_reason: null,
       })
       .in("id", ids);
-
-    if (error) return setAppError(error.message);
-
-    await Promise.allSettled(pendingEntries.map((entry) => createPortalMessage({
-      recipientId: entry.employeeId,
-      title: "Hours approved",
-      body: `${entry.customerName} on ${displayDate(entry.date)} was approved.`,
-      relatedEntryId: entry.id,
-    })));
-
-    closeTransientPanels();
+    if (error) {
+      setApprovingAll(false);
+      return setAppError(error.message);
+    }
     await loadAppData();
+    setApprovingAll(false);
   }
 
   function openEditModal(entry) {
@@ -1457,7 +1387,7 @@ export default function RestorationHoursTracker() {
       end: entry.end,
       lunchTaken: entry.lunchTaken,
       lunchMinutes: entry.lunchMinutes,
-      notes: entry.notes || entry.job_notes || entry.note || entry.description || "",
+      notes: entry.notes || "",
     });
   }
 
@@ -1618,62 +1548,24 @@ export default function RestorationHoursTracker() {
     const weekOneSource = source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
     const weekTwoSource = source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
     const summary = summarizePayroll(source);
-
-    const groupEntries = (entriesForWeek) => {
-      const groups = new Map();
-      entriesForWeek.forEach((entry) => {
-        const employee = getEmployeeName(entry.employeeId);
-        const job = entry.customerName || "Unnamed Job";
-        const key = `${employee}__${job}__${entry.jobType}`;
-        if (!groups.has(key)) groups.set(key, { employee, job, jobType: entry.jobType || "Other", entries: [], total: 0 });
-        const group = groups.get(key);
-        group.entries.push(entry);
-        group.total += entryHours(entry);
-      });
-      return Array.from(groups.values()).sort((a, b) => `${a.employee} ${a.job}`.localeCompare(`${b.employee} ${b.job}`));
-    };
-
-    const renderEntry = (entry) => `
-      <div class="entry-row">
-        <div><b>${escapeHtml(displayDate(entry.date))}</b><span>${escapeHtml(entry.start)} - ${escapeHtml(entry.end)}</span></div>
-        <div><b>${entryHours(entry).toFixed(2)} hrs</b><span>Lunch: ${entry.lunchTaken ? `${escapeHtml(entry.lunchMinutes)} min` : "No"}</span></div>
-        <div><b>${escapeHtml(entry.approvalStatus || "pending")}</b><span>${entry.employeeSignature ? `Signed: ${escapeHtml(entry.employeeSignature)}` : "No signature"}</span></div>
-      </div>
-      <div class="notes"><p class="eyebrow">Notes for ${escapeHtml(displayShortDate(entry.date))}</p><p>${entry.notes ? nl2br(entry.notes) : "No notes submitted."}</p>${entry.denialReason ? `<p class="denial">Denied reason: ${nl2br(entry.denialReason)}</p>` : ""}${entry.photoUrl ? `<p class="doclink">Photo/documentation: ${escapeHtml(entry.photoUrl)}</p>` : ""}</div>`;
-
-    const renderGroup = (group) => `
-      <article class="job-card">
-        <div class="job-header">
-          <div><p class="eyebrow">${escapeHtml(group.employee)}</p><h3>${escapeHtml(group.job)}</h3><p class="muted">${escapeHtml(group.jobType)}</p></div>
-          <div class="total-box"><span>Job Total</span><b>${group.total.toFixed(2)}h</b></div>
-        </div>
-        <div class="entries">${group.entries.map(renderEntry).join("")}</div>
+    const renderEntryCard = (entry) => `
+      <article class="entry">
+        <div class="entry-head"><div><small>${escapeHtml(getEmployeeName(entry.employeeId))}</small><h3>${escapeHtml(entry.customerName)}</h3><p>${escapeHtml(entry.jobType)} • ${escapeHtml(displayDate(entry.date))} • ${escapeHtml(entry.start)}-${escapeHtml(entry.end)} • ${entryHours(entry).toFixed(2)} hrs</p></div><span class="status ${escapeHtml(String(entry.approvalStatus || "pending").toLowerCase())}">${escapeHtml(entry.approvalStatus || "pending")}</span></div>
+        <div class="meta"><span>Lunch: ${entry.lunchTaken ? `${escapeHtml(String(entry.lunchMinutes))} min` : "No"}</span><span>Signature: ${escapeHtml(entry.employeeSignature || "Not signed")}</span>${entry.denialReason ? `<span>Denial: ${escapeHtml(entry.denialReason)}</span>` : ""}</div>
+        ${entry.photoUrl ? `<p class="doc-link">Documentation link: ${escapeHtml(entry.photoUrl)}</p>` : ""}
+        <section class="notes"><small>Full Job Notes</small><p>${escapeHtml(entry.notes || "No notes submitted.")}</p></section>
       </article>`;
-
-    const renderWeek = (label, range, entriesForWeek) => {
-      const groups = groupEntries(entriesForWeek);
-      const weekSummary = summarizePayroll(entriesForWeek);
-      return `<section class="week"><div class="week-title"><div><p class="eyebrow">${escapeHtml(range)}</p><h2>${escapeHtml(label)}</h2></div><strong>${weekSummary.totalHours.toFixed(2)} hrs</strong></div>${groups.length ? groups.map(renderGroup).join("") : `<div class="empty">No documented entries for this week.</div>`}</section>`;
-    };
-
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>VODA Job Notes Report</title><style>
-      *{box-sizing:border-box}body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#eef3f6;color:#0f172a}.page{max-width:1060px;margin:0 auto;padding:32px}.hero{background:linear-gradient(135deg,#07111f,#123849 68%,#155e75);color:white;border-radius:30px;padding:32px;margin-bottom:22px}.brand,.eyebrow{font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#64748b}.brand{color:#a5f3fc;font-size:12px;letter-spacing:.24em}.hero h1{margin:10px 0 8px;font-size:40px;line-height:1;letter-spacing:-.06em}.hero p{margin:0;color:#d2f5fb;font-weight:700}.summary{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:26px}.stat{background:white;border:1px solid #dbe7ee;border-radius:20px;padding:15px}.stat span{display:block;font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#64748b}.stat b{display:block;margin-top:5px;font-size:21px;letter-spacing:-.04em}.week{margin-top:26px}.week-title{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px}.week h2{margin:2px 0 0;font-size:25px;letter-spacing:-.04em}.week-title strong{border-radius:999px;background:#0f172a;color:white;padding:9px 13px}.job-card{break-inside:avoid;background:white;border:1px solid #dbe7ee;border-radius:24px;margin:14px 0;padding:18px}.job-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.job-header h3{margin:4px 0;font-size:22px;line-height:1.1;letter-spacing:-.04em}.muted{margin:0;color:#475569;font-weight:700}.total-box{text-align:right;background:#ecfeff;border:1px solid #cffafe;border-radius:16px;padding:10px 12px;min-width:105px}.total-box span{display:block;color:#0e7490;font-size:10px;font-weight:900;text-transform:uppercase}.total-box b{font-size:18px}.entries{margin-top:14px}.entry-row{display:grid;grid-template-columns:1.4fr .8fr 1fr;gap:10px;padding:10px 0;border-top:1px solid #e2e8f0}.entry-row b{display:block;font-size:13px}.entry-row span{display:block;margin-top:2px;color:#64748b;font-size:12px;font-weight:700}.notes{border:1px solid #dbe7ee;background:#f8fafc;border-radius:18px;padding:13px;margin:6px 0 14px}.notes p{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;font-size:13px}.denial{color:#991b1b;font-weight:800}.doclink{color:#0e7490;font-weight:800}.empty{padding:22px;border:1px dashed #cbd5e1;border-radius:20px;background:white;text-align:center;color:#64748b;font-weight:800}@media print{body{background:white}.page{padding:18px;max-width:none}.hero{border-radius:0;margin:-18px -18px 20px}.job-card,.stat{break-inside:avoid}.summary{grid-template-columns:repeat(6,1fr)}}@media(max-width:760px){.page{padding:14px}.summary{grid-template-columns:repeat(2,1fr)}.entry-row{grid-template-columns:1fr}.job-header{flex-direction:column}.hero h1{font-size:32px}}
-    </style></head><body><main class="page"><section class="hero"><div class="brand">VODA Of Tucson</div><h1>Job Notes Report</h1><p>Pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Phoenix time • ${currentUser?.role === "admin" ? (selectedEmployeeId === "all" ? "All employees" : escapeHtml(getEmployeeName(selectedEmployeeId))) : escapeHtml(currentUser?.name || "Employee")}</p></section><section class="summary"><div class="stat"><span>Week 1</span><b>${summarizePayroll(weekOneSource).totalHours.toFixed(2)}h</b></div><div class="stat"><span>Week 2</span><b>${summarizePayroll(weekTwoSource).totalHours.toFixed(2)}h</b></div><div class="stat"><span>Period</span><b>${summary.totalHours.toFixed(2)}h</b></div><div class="stat"><span>Regular</span><b>${summary.regularHours.toFixed(2)}h</b></div><div class="stat"><span>Overtime</span><b>${summary.overtimeHours.toFixed(2)}h</b></div><div class="stat"><span>Vacation</span><b>${summary.vacationHours.toFixed(2)}h</b></div></section>${renderWeek("Week 1", `${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, weekOneSource)}${renderWeek("Week 2", `${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, weekTwoSource)}</main><script>window.onload=()=>setTimeout(()=>window.print(),350);</script></body></html>`;
-
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800");
-    if (!printWindow) {
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${onlyApproved ? "approved-" : ""}voda-job-notes-report-${formatDate(weekStart)}.html`;
-      link.click();
-      URL.revokeObjectURL(url);
-      return;
-    }
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    const renderWeek = (title, entriesForWeek) => `<section class="week"><h2>${escapeHtml(title)}</h2>${entriesForWeek.length ? entriesForWeek.map(renderEntryCard).join("") : '<div class="empty">No entries for this week.</div>'}</section>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>VODA Job Documentation Export</title><style>
+      body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0;background:#f3f7f9;color:#0f172a;padding:28px}.shell{max-width:1120px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a,#164e63);color:white;border-radius:28px;padding:28px;box-shadow:0 22px 60px rgba(15,23,42,.18)}.pill{display:inline-block;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:7px 12px;font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}h1{margin:14px 0 8px;font-size:34px;letter-spacing:-.05em}.subtitle{color:#cffafe;font-weight:700}.summary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:18px 0}.box{background:white;border:1px solid #e2e8f0;border-radius:20px;padding:14px;box-shadow:0 8px 24px rgba(15,23,42,.06)}.box small,.notes small,.entry small{display:block;color:#64748b;font-weight:900;text-transform:uppercase;font-size:10px;letter-spacing:.14em}.box b{display:block;margin-top:5px;font-size:22px}.week{margin-top:22px}.week h2{letter-spacing:-.035em}.entry{break-inside:avoid;background:white;border:1px solid #dbeafe;border-radius:24px;padding:18px;margin:12px 0;box-shadow:0 12px 34px rgba(15,23,42,.07)}.entry-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.entry h3{margin:4px 0 4px;font-size:21px;letter-spacing:-.035em}.entry p{margin:0;color:#475569;font-weight:700}.status{border-radius:999px;padding:7px 10px;font-size:11px;text-transform:uppercase;font-weight:900;background:#fef3c7;color:#92400e}.status.approved{background:#dcfce7;color:#166534}.status.denied{background:#fee2e2;color:#991b1b}.meta{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.meta span,.doc-link{border-radius:14px;background:#f1f5f9;padding:8px 10px;color:#334155;font-size:12px;font-weight:800}.notes{margin-top:12px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:18px;padding:14px}.notes p{white-space:pre-wrap;word-break:break-word;overflow:visible;line-height:1.55;color:#0f172a}.empty{border:1px dashed #cbd5e1;border-radius:20px;padding:22px;text-align:center;color:#64748b;font-weight:800}@media print{body{background:white;padding:0}.hero,.entry,.box{box-shadow:none}.summary{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.entry-head{flex-direction:column}}
+    </style></head><body><main class="shell"><section class="hero"><span class="pill">VODA Of Tucson</span><h1>Job Documentation Export</h1><p class="subtitle">Two-week pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Phoenix time • ${currentUser?.role === "admin" ? (selectedEmployeeId === "all" ? "All employees" : escapeHtml(getEmployeeName(selectedEmployeeId))) : escapeHtml(currentUser?.name || "Employee")}</p></section><section class="summary"><div class="box"><small>Week 1</small><b>${summarizePayroll(weekOneSource).totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${summarizePayroll(weekTwoSource).totalHours.toFixed(2)}h</b></div><div class="box"><small>Period</small><b>${summary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${summary.regularHours.toFixed(2)}h</b></div><div class="box"><small>Overtime</small><b>${summary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${summary.vacationHours.toFixed(2)}h</b></div></section>${renderWeek(`Week 1: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, weekOneSource)}${renderWeek(`Week 2: ${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, weekTwoSource)}</main></body></html>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${onlyApproved ? "approved-" : ""}voda-job-documentation-${formatDate(weekStart)}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   function updateEmployeeDraft(employeeId, updates) {
@@ -1919,7 +1811,7 @@ export default function RestorationHoursTracker() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.03, ...spring }}
                             className={cx(
-                              "group relative min-h-[206px] w-full overflow-hidden rounded-[1.35rem] border p-3 pt-9 text-center shadow-xl backdrop-blur-2xl transition-all duration-500 ease-out will-change-transform sm:min-h-[224px]",
+                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.35rem] border p-3 pt-10 text-center shadow-xl backdrop-blur-2xl transition-all duration-500 ease-out will-change-transform sm:min-h-[242px]",
                               "border-white/15 bg-white/[0.075] hover:-translate-y-0.5 hover:bg-white/[0.105] hover:shadow-2xl hover:shadow-cyan-950/20",
                               isToday && "border-cyan-400/90 ring-2 ring-cyan-400/60"
                             )}
@@ -1930,9 +1822,9 @@ export default function RestorationHoursTracker() {
                               </span>
                             )}
 
-                            <div className="flex min-h-[44px] flex-col items-start justify-start gap-0.5 text-left">
+                            <div className="flex min-h-[58px] flex-col items-start justify-start gap-1 text-left">
                               <p className="text-[13px] font-black leading-none tracking-[-0.025em] text-white sm:text-[14px]">{shortDay}</p>
-                              <p className="max-w-full whitespace-normal break-words text-[10px] font-extrabold leading-tight text-slate-400 sm:text-[10.5px]">{displayShortDate(date)}</p>
+                              <p className="max-w-full text-[10px] font-extrabold leading-tight text-slate-400 sm:text-[10.5px]">{displayDate(date)}</p>
                             </div>
 
                             <div className="my-3 h-px w-full bg-white/12" />
@@ -1963,7 +1855,7 @@ export default function RestorationHoursTracker() {
                                     >
                                       <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                          <p className={cx("line-clamp-2 job-text text-[10px] font-black leading-snug tracking-[-0.02em] text-white", isDeniedEntry(entry) && "text-red-100")}>{entry.customerName}</p>
+                                          <p className={cx("line-clamp-2 job-text text-[10.5px] font-black leading-snug tracking-[-0.02em] text-white", isDeniedEntry(entry) && "text-red-100")}>{entry.customerName}</p>
                                           <p className="mt-0.5 job-text text-[9.5px] font-bold leading-snug text-slate-400">{entry.start}–{entry.end}</p>
                                         </div>
                                         <span className={cx("shrink-0 rounded-full bg-cyan-400/12 px-1.5 py-0.5 text-[9px] font-black text-cyan-200", isDeniedEntry(entry) && "bg-red-400/15 text-red-100")}>{isDeniedEntry(entry) ? "Denied" : `${entryHours(entry).toFixed(2)}h`}</span>
@@ -2203,7 +2095,8 @@ export default function RestorationHoursTracker() {
               expandedApprovalGroups={expandedApprovalGroups}
               toggleApprovalGroup={toggleApprovalGroup}
               updateStatus={updateStatus}
-              approveAllPending={approveAllPendingEntries}
+              approveAllPendingEntries={approveAllPendingEntries}
+              approvingAll={approvingAll}
               setReviewModal={openDenyModal}
               openEditModal={openEditModal}
               setSelectedEmployeeId={setSelectedEmployeeId}
@@ -2236,7 +2129,7 @@ export default function RestorationHoursTracker() {
                     const employee = entry.employeeId === currentUser.id ? currentUser : employeeById.get(entry.employeeId);
                     return (
                       <div key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm transition duration-300 dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "border-slate-200 bg-slate-100/70 opacity-45 grayscale shadow-none dark:bg-white/5")}>
-                        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-black">{entry.customerName}</p><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="text-xs text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
+                        <div className="mb-3 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="clean-wrap text-sm font-black leading-snug">{entry.customerName}</p><p className="clean-wrap text-xs font-bold leading-snug text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="clean-wrap text-xs leading-snug text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
                         <EntryDetails entry={entry} employee={employee} />
                         {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
                         {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-1 gap-2 rounded-2xl sm:grid-cols-3 border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
@@ -2476,19 +2369,19 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
         transition={smoothSpring}
         className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-white/70 bg-slate-50/95 p-4 shadow-2xl shadow-slate-950/25 ring-1 ring-white/80 backdrop-blur-2xl sm:p-5 dark:border-white/10 dark:bg-slate-900/95 dark:ring-white/10"
       >
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
             <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Day detail</p>
             <h2 className="mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">{displayDate(dayDetail.date)}</h2>
             <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Full job and hours breakdown for this date.</p>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="cool" onClick={() => openQuickAddForDate(dayDetail.date)}><Plus className="h-4 w-4" /> Quick Add</Button>
             <Button variant="ghost" onClick={() => setDayDetail(null)}><X className="h-5 w-5" /></Button>
           </div>
         </div>
 
-        <div className="mb-4 grid grid-cols-1 gap-2 xs:grid-cols-3 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-3 gap-2">
           <MiniStat label="Active" value={`${totalHours.toFixed(2)}h`} tone="cyan" />
           <MiniStat label="Approved" value={`${approvedHours.toFixed(2)}h`} tone="emerald" />
           <MiniStat label="Denied" value={`${deniedEntries.length}`} tone="red" />
@@ -2502,8 +2395,8 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
           ) : dayEntries.map((entry) => {
             const employee = entry.employeeId === currentUser?.id ? currentUser : employeeById.get(entry.employeeId);
             return (
-              <div key={entry.id} className={cx("min-w-0 rounded-3xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5", isDeniedEntry(entry) && "bg-slate-100/65 opacity-60 grayscale dark:bg-white/[0.035]")}> 
-                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div key={entry.id} className={cx("rounded-3xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5", isDeniedEntry(entry) && "bg-slate-100/65 opacity-60 grayscale dark:bg-white/[0.035]")}> 
+                <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="clean-wrap text-base font-black leading-snug tracking-[-0.02em] text-slate-950 dark:text-white">{entry.customerName}</p>
                     <p className="text-xs font-black uppercase tracking-[0.1em] text-cyan-700 dark:text-cyan-300">{entry.jobType}</p>
@@ -2654,7 +2547,7 @@ function MiniStat({ label, value, tone }) {
     amber: "text-amber-700 dark:text-amber-200",
     red: "text-red-700 dark:text-red-200",
   };
-  return <div className="min-w-0 rounded-3xl bg-white/75 p-3 shadow-sm ring-1 ring-white/80 sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="min-w-0 whitespace-normal text-[10px] font-black uppercase leading-tight tracking-[0.06em] text-slate-400 sm:text-xs">{label}</p><p className={cx("mt-1 min-w-0 whitespace-normal text-xl font-black leading-tight tracking-[-0.02em] sm:text-2xl", tones[tone])}>{value}</p></div>;
+  return <div className="min-w-0 rounded-3xl bg-white/75 p-3 shadow-sm ring-1 ring-white/80 sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="break-words text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-slate-400 sm:text-xs">{label}</p><p className={cx("mt-1 break-words text-xl font-black leading-tight sm:text-2xl", tones[tone])}>{value}</p></div>;
 }
 
 function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError }) {
