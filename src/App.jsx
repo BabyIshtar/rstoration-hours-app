@@ -1188,18 +1188,18 @@ export default function RestorationHoursTracker() {
   }
 
   function exportPayrollPdf() {
-    const approved = visibleEntries.filter((entry) => String(entry.approvalStatus || entry.status || "").toLowerCase() === "approved");
+    const reportEntries = visibleEntries.filter((entry) => String(entry.approvalStatus || entry.status || "").toLowerCase() !== "denied");
     const escapeHtml = (value) => String(value ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
 
-    const approvedWeekOne = approved.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
-    const approvedWeekTwo = approved.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
-    const weekOneSummary = summarizePayroll(approvedWeekOne);
-    const weekTwoSummary = summarizePayroll(approvedWeekTwo);
-    const approvedPeriodSummary = summarizePayroll(approved);
+    const reportWeekOne = reportEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const reportWeekTwo = reportEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const weekOneSummary = summarizePayroll(reportWeekOne);
+    const weekTwoSummary = summarizePayroll(reportWeekTwo);
+    const reportPeriodSummary = summarizePayroll(reportEntries);
 
     const employeeName = (entry) => employeeById.get(entry.employeeId)?.name || currentUser?.name || "Employee";
     const timeRange = (entry) => `${entry.start || "--:--"} - ${entry.end || "--:--"}`;
@@ -1212,6 +1212,7 @@ export default function RestorationHoursTracker() {
         <td><b>${escapeHtml(entry.customerName || "Unnamed Job")}</b></td>
         <td>${escapeHtml(timeRange(entry))}</td>
         <td class="hours">${entryHours(entry).toFixed(2)}</td>
+        <td><span class="status ${escapeHtml(String(entry.approvalStatus || "pending").toLowerCase())}">${escapeHtml(entry.approvalStatus || "pending")}</span></td>
         <td class="notes">${notes ? escapeHtml(notes) : "No notes submitted."}</td>
       </tr>`;
     }).join("");
@@ -1226,19 +1227,19 @@ export default function RestorationHoursTracker() {
           <div class="week-total"><small>Week Total</small><b>${summary.totalHours.toFixed(2)} hrs</b></div>
         </div>
         <table>
-          <thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead>
-          <tbody>${entries.length ? renderRows(entries) : '<tr><td colspan="6" class="empty">No approved entries for this week.</td></tr>'}</tbody>
+          <thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Status</th><th>Job Notes</th></tr></thead>
+          <tbody>${entries.length ? renderRows(entries) : '<tr><td colspan="7" class="empty">No submitted entries for this week.</td></tr>'}</tbody>
         </table>
       </section>`;
 
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>VODA Payroll ${displayDate(weekStart)}</title><style>
-      *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;margin:0;background:#f5f8fa;color:#0f172a;padding:28px}.sheet{max-width:1180px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a 0%,#173a44 52%,#0e7490 100%);color:white;border-radius:30px;padding:30px;box-shadow:0 22px 70px rgba(15,23,42,.18)}.pill{display:inline-flex;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:8px 13px;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}h1{margin:16px 0 8px;font-size:36px;letter-spacing:-.055em;line-height:1}.subtitle{margin:0;color:#d7fbff;font-weight:750}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:18px 0 10px}.box{background:white;border:1px solid #e2e8f0;border-radius:22px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.06)}.box small,.week-total small,td small{display:block;color:#64748b;font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase}.box b{display:block;margin-top:5px;font-size:22px;letter-spacing:-.04em}.box.ot-zero b{color:#64748b}.week{break-inside:avoid;margin-top:24px;background:white;border:1px solid #dbeafe;border-radius:26px;padding:18px;box-shadow:0 12px 36px rgba(15,23,42,.07)}.week-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.week-title p{margin:0;color:#0891b2;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}.week-title h2{margin:4px 0 0;font-size:24px;letter-spacing:-.05em}.week-total{text-align:right;background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:10px 12px;min-width:150px}.week-total b{font-size:18px}table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;overflow:hidden;border-radius:18px;border:1px solid #e2e8f0}th{background:#0f172a;color:white;text-align:left;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:11px 10px}td{vertical-align:top;border-top:1px solid #e2e8f0;padding:12px 10px;font-size:12px;line-height:1.45;color:#1e293b;overflow-wrap:anywhere;word-break:normal}td:nth-child(1){width:17%}td:nth-child(2){width:10%}td:nth-child(3){width:18%}td:nth-child(4){width:11%}.hours{width:8%;font-weight:950;color:#0e7490}.notes{width:36%;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;color:#0f172a}.empty{text-align:center;color:#64748b;font-weight:800;padding:22px}.foot{margin:18px 0;color:#64748b;font-size:11px;font-weight:700}.no-print{display:block;margin-top:18px;color:#64748b;font-size:12px;font-weight:700}@media print{body{background:white;padding:0}.hero,.box,.week{box-shadow:none}.no-print{display:none}.sheet{max-width:none}.summary{grid-template-columns:repeat(3,1fr)}.week{page-break-inside:avoid}}@media(max-width:800px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.week-title{align-items:flex-start;flex-direction:column}.week-total{text-align:left}table{table-layout:auto}.notes{min-width:260px}}
-    </style></head><body><main class="sheet"><section class="hero"><span class="pill">VODA Of Tucson</span><h1>Approved Payroll Report</h1><p class="subtitle">Two-week pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Approved hours only • Phoenix time</p></section><section class="summary"><div class="box"><small>Week 1</small><b>${weekOneSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${weekTwoSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Period Total</small><b>${approvedPeriodSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${approvedPeriodSummary.regularHours.toFixed(2)}h</b></div><div class="box ${approvedPeriodSummary.overtimeHours <= 0 ? "ot-zero" : ""}"><small>Overtime</small><b>${approvedPeriodSummary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${approvedPeriodSummary.vacationHours.toFixed(2)}h</b></div></section>${renderWeek(`Week 1`, `${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, approvedWeekOne, weekOneSummary)}${renderWeek(`Week 2`, `${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, approvedWeekTwo, weekTwoSummary)}<p class="foot">Overtime is calculated per employee per week only after 40 worked hours. Vacation/PTO is tracked separately and does not create overtime.</p><p class="no-print">Use your browser print option and select Save as PDF.</p></main></body></html>`;
+      *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;margin:0;background:#f5f8fa;color:#0f172a;padding:28px}.sheet{max-width:1180px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a 0%,#173a44 52%,#0e7490 100%);color:white;border-radius:30px;padding:30px;box-shadow:0 22px 70px rgba(15,23,42,.18)}.pill{display:inline-flex;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:8px 13px;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}h1{margin:16px 0 8px;font-size:36px;letter-spacing:-.055em;line-height:1}.subtitle{margin:0;color:#d7fbff;font-weight:750}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:18px 0 10px}.box{background:white;border:1px solid #e2e8f0;border-radius:22px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.06)}.box small,.week-total small,td small{display:block;color:#64748b;font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase}.box b{display:block;margin-top:5px;font-size:22px;letter-spacing:-.04em}.box.ot-zero b{color:#64748b}.week{break-inside:avoid;margin-top:24px;background:white;border:1px solid #dbeafe;border-radius:26px;padding:18px;box-shadow:0 12px 36px rgba(15,23,42,.07)}.week-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.week-title p{margin:0;color:#0891b2;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}.week-title h2{margin:4px 0 0;font-size:24px;letter-spacing:-.05em}.week-total{text-align:right;background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:10px 12px;min-width:150px}.week-total b{font-size:18px}table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;overflow:hidden;border-radius:18px;border:1px solid #e2e8f0}th{background:#0f172a;color:white;text-align:left;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:11px 10px}td{vertical-align:top;border-top:1px solid #e2e8f0;padding:12px 10px;font-size:12px;line-height:1.45;color:#1e293b;overflow-wrap:anywhere;word-break:normal}td:nth-child(1){width:17%}td:nth-child(2){width:10%}td:nth-child(3){width:18%}td:nth-child(4){width:11%}.hours{width:8%;font-weight:950;color:#0e7490}.status{display:inline-block;border-radius:999px;padding:5px 8px;font-size:9px;text-transform:uppercase;font-weight:950;background:#fef3c7;color:#92400e}.status.approved{background:#dcfce7;color:#166534}.status.denied{background:#fee2e2;color:#991b1b}.notes{width:31%;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;color:#0f172a}.empty{text-align:center;color:#64748b;font-weight:800;padding:22px}.foot{margin:18px 0;color:#64748b;font-size:11px;font-weight:700}.no-print{display:block;margin-top:18px;color:#64748b;font-size:12px;font-weight:700}@media print{body{background:white;padding:0}.hero,.box,.week{box-shadow:none}.no-print{display:none}.sheet{max-width:none}.summary{grid-template-columns:repeat(3,1fr)}.week{page-break-inside:avoid}}@media(max-width:800px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.week-title{align-items:flex-start;flex-direction:column}.week-total{text-align:left}table{table-layout:auto}.notes{min-width:260px}}
+    </style></head><body><main class="sheet"><section class="hero"><span class="pill">VODA Of Tucson</span><h1>Hours Report</h1><p class="subtitle">Two-week pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Submitted and approved hours • Phoenix time</p></section><section class="summary"><div class="box"><small>Week 1</small><b>${weekOneSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${weekTwoSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Period Total</small><b>${reportPeriodSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${reportPeriodSummary.regularHours.toFixed(2)}h</b></div><div class="box ${reportPeriodSummary.overtimeHours <= 0 ? "ot-zero" : ""}"><small>Overtime</small><b>${reportPeriodSummary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${reportPeriodSummary.vacationHours.toFixed(2)}h</b></div></section>${renderWeek(`Week 1`, `${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, reportWeekOne, weekOneSummary)}${renderWeek(`Week 2`, `${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, reportWeekTwo, weekTwoSummary)}<p class="foot">Overtime is calculated per employee per week only after 40 worked hours. Vacation/PTO is tracked separately and does not create overtime.</p><p class="no-print">Use your browser print option and select Save as PDF.</p></main></body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `voda-approved-payroll-pay-period-${formatDate(weekStart)}.html`;
+    link.download = `voda-hours-report-pay-period-${formatDate(weekStart)}.html`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -1837,7 +1838,7 @@ export default function RestorationHoursTracker() {
                       <Button variant="outline" aria-label="Next pay period" onClick={() => setWeekStart(addDays(weekStart, 14))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronRight className="h-5 w-5" /></Button>
                       <Button variant="cool" onClick={() => exportCsv(false)} className="h-12 gap-2 rounded-[1.25rem] px-4 text-sm sm:h-14 sm:px-5 sm:text-base"><Download className="h-5 w-5" /> CSV</Button>
                       <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> Notes</Button>
-                      {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> PDF</Button>}
+                      <Button variant="outline" onClick={exportPayrollPdf} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> PDF</Button>
                     </div>
                   </div>
 
@@ -2220,7 +2221,7 @@ function CapabilityDock({ installPrompt, installApp, notificationPermission, req
     { icon: online ? <Wifi /> : <WifiOff />, label: online ? "Online" : "Offline", value: offlineQueue.length ? `${offlineQueue.length} queued` : "Synced", action: offlineQueue.length ? syncOfflineQueue : null },
     { icon: <Bell />, label: "Notifications", value: notificationPermission === "granted" ? "Enabled" : "Enable", action: notificationPermission !== "granted" && notificationPermission !== "unsupported" ? requestNotifications : null },
     { icon: <FileText />, label: "Job Notes", value: "Export", action: () => exportDocumentationReport(false) },
-    ...(isAdmin ? [{ icon: <FileText />, label: "Payroll PDF", value: "Export", action: exportPayrollPdf }] : []),
+    { icon: <FileText />, label: "Hours PDF", value: "Export", action: exportPayrollPdf },
   ];
 
   return (
@@ -2359,7 +2360,7 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
             {currentUser.role === "admin" && <select aria-label="Filter documentation by employee" value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="input"><option value="all">All employees</option>{employees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>}
             <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search job documentation" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search job, notes, employee..." /></div>
             <Button variant="outline" onClick={() => exportCsv(false)} className="min-h-[48px]"><Download className="mr-2 h-4 w-4" /> CSV</Button>
-            {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Payroll PDF</Button>}
+            <Button variant="outline" onClick={exportPayrollPdf} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Hours PDF</Button>
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-8">
