@@ -1165,24 +1165,237 @@ export default function RestorationHoursTracker() {
     await loadAppData();
   }
 
-  function exportPayrollPdf() {
-    const approved = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved");
-    const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-    const renderRows = (weekEntries) => weekEntries.map((entry) => {
-      const employee = employeeById.get(entry.employeeId)?.name || currentUser?.name || "Employee";
-      return `<tr><td>${escapeHtml(employee)}</td><td>${escapeHtml(displayDate(entry.date))}</td><td>${escapeHtml(entry.customerName)}</td><td>${escapeHtml(entry.start)}–${escapeHtml(entry.end)}</td><td>${entryHours(entry).toFixed(2)}</td><td class="notes">${escapeHtml(entry.notes || "")}</td></tr>`;
-    }).join("");
-    const approvedWeekOne = approved.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
-    const approvedWeekTwo = approved.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
-    const approvedPeriodSummary = summarizePayroll(approved);
-    const html = `<!doctype html><html><head><title>VODA Payroll ${displayDate(weekStart)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:32px;color:#0f172a}h1{letter-spacing:-.04em;margin-bottom:8px}.pill{display:inline-block;background:#ecfeff;color:#0e7490;border-radius:999px;padding:6px 12px;font-weight:800}.summary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:22px 0}.box{border:1px solid #e2e8f0;border-radius:16px;padding:12px;background:#f8fafc}.box small{display:block;color:#64748b;font-weight:800;text-transform:uppercase;font-size:10px;letter-spacing:.12em}.box b{font-size:18px}h2{margin-top:28px}table{width:100%;border-collapse:collapse;margin-top:12px;table-layout:fixed}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #e2e8f0;padding:10px;font-size:12px}.notes{white-space:pre-wrap;word-break:break-word;width:30%}</style></head><body><p class="pill">VODA Of Tucson</p><h1>Approved Payroll Report</h1><p>Two-week pay period: ${displayDate(weekStart)} – ${displayDate(addDays(weekStart, 13))}</p><div class="summary"><div class="box"><small>Week 1</small><b>${summarizePayroll(approvedWeekOne).totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${summarizePayroll(approvedWeekTwo).totalHours.toFixed(2)}h</b></div><div class="box"><small>Period</small><b>${approvedPeriodSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${approvedPeriodSummary.regularHours.toFixed(2)}h</b></div><div class="box"><small>Overtime</small><b>${approvedPeriodSummary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${approvedPeriodSummary.vacationHours.toFixed(2)}h</b></div></div><h2>Week 1</h2><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead><tbody>${renderRows(approvedWeekOne) || '<tr><td colspan="6">No approved entries for Week 1.</td></tr>'}</tbody></table><h2>Week 2</h2><table><thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Job Notes</th></tr></thead><tbody>${renderRows(approvedWeekTwo) || '<tr><td colspan="6">No approved entries for Week 2.</td></tr>'}</tbody></table></body></html>`;
-    const blob = new Blob([html], { type: "text/html" });
+  function downloadBlob(blob, fileName) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `voda-approved-payroll-pay-period-${formatDate(weekStart)}.html`;
+    link.download = fileName;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  function createModernHoursPdf(sourceEntries = [], title = "Hours & Job Notes Report") {
+    const pageWidth = 612;
+    const pageHeight = 792;
+    const margin = 42;
+    const pages = [];
+    let commands = [];
+    let y = 42;
+
+    const pdfText = (value) => String(value ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/\(/g, "\\(")
+      .replace(/\)/g, "\\)")
+      .replace(/[\r\n\t]+/g, " ");
+
+    const add = (command) => commands.push(command);
+    const rgb = (r, g, b) => `${(r / 255).toFixed(3)} ${(g / 255).toFixed(3)} ${(b / 255).toFixed(3)}`;
+    const fill = (r, g, b) => add(`${rgb(r, g, b)} rg`);
+    const stroke = (r, g, b) => add(`${rgb(r, g, b)} RG`);
+    const rect = (x, top, w, h, r = 255, g = 255, b = 255) => {
+      fill(r, g, b);
+      add(`${x} ${(pageHeight - top - h).toFixed(2)} ${w} ${h} re f`);
+    };
+    const line = (x1, top1, x2, top2, r = 226, g = 232, b = 240) => {
+      stroke(r, g, b);
+      add(`0.7 w ${x1} ${(pageHeight - top1).toFixed(2)} m ${x2} ${(pageHeight - top2).toFixed(2)} l S`);
+    };
+    const text = (value, x, top, size = 10, font = "F1", r = 15, g = 23, b = 42) => {
+      fill(r, g, b);
+      add(`BT /${font} ${size} Tf 1 0 0 1 ${x} ${(pageHeight - top).toFixed(2)} Tm (${pdfText(value)}) Tj ET`);
+    };
+    const wrap = (value, maxWidth, size = 10) => {
+      const maxChars = Math.max(18, Math.floor(maxWidth / (size * 0.52)));
+      return String(value || "").split(/\n+/).flatMap((paragraph) => {
+        const words = paragraph.trim().split(/\s+/).filter(Boolean);
+        if (!words.length) return [""];
+        const lines = [];
+        let current = "";
+        words.forEach((word) => {
+          const next = current ? `${current} ${word}` : word;
+          if (next.length > maxChars) {
+            if (current) lines.push(current);
+            current = word;
+          } else {
+            current = next;
+          }
+        });
+        if (current) lines.push(current);
+        return lines;
+      });
+    };
+    const finishPage = () => {
+      pages.push(commands.join("\n"));
+      commands = [];
+      y = 42;
+    };
+    const ensureSpace = (needed = 80) => {
+      if (y + needed <= pageHeight - 44) return;
+      finishPage();
+      drawPageHeader(true);
+    };
+    const drawPageHeader = (continued = false) => {
+      rect(0, 0, pageWidth, 8, 8, 145, 178);
+      text("VODA OF TUCSON", margin, 34, 9, "F2", 8, 145, 178);
+      if (continued) text(`${title} continued`, margin, 52, 12, "F2", 15, 23, 42);
+      y = continued ? 76 : 42;
+    };
+
+    const weekOneSource = sourceEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
+    const weekTwoSource = sourceEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const periodSummary = summarizePayroll(sourceEntries);
+
+    drawPageHeader(false);
+    text("VODA OF TUCSON", margin, y, 10, "F2", 8, 145, 178);
+    y += 22;
+    text(title, margin, y, 24, "F2", 15, 23, 42);
+    y += 24;
+    text(`Pay Period: ${displayDate(weekStart)} - ${displayDate(addDays(weekStart, 13))}`, margin, y, 10, "F1", 71, 85, 105);
+    y += 16;
+    text(`Generated: ${displayDate(new Date())} • Phoenix time • ${currentUser?.role === "admin" ? (selectedEmployeeId === "all" ? "All employees" : getEmployeeName(selectedEmployeeId)) : currentUser?.name || "Employee"}`, margin, y, 9, "F1", 100, 116, 139);
+    y += 28;
+
+    const statW = 82;
+    [
+      ["WEEK 1", summarizePayroll(weekOneSource).totalHours.toFixed(2) + "h"],
+      ["WEEK 2", summarizePayroll(weekTwoSource).totalHours.toFixed(2) + "h"],
+      ["PERIOD", periodSummary.totalHours.toFixed(2) + "h"],
+      ["REGULAR", periodSummary.regularHours.toFixed(2) + "h"],
+      ["OVERTIME", periodSummary.overtimeHours.toFixed(2) + "h"],
+      ["VACATION", periodSummary.vacationHours.toFixed(2) + "h"],
+    ].forEach(([label, value], index) => {
+      const x = margin + index * (statW + 5);
+      rect(x, y, statW, 48, 241, 245, 249);
+      text(label, x + 8, y + 16, 7, "F2", 100, 116, 139);
+      text(value, x + 8, y + 35, 13, "F2", 15, 23, 42);
+    });
+    y += 72;
+
+    const renderWeek = (label, weekEntries) => {
+      ensureSpace(70);
+      text(label, margin, y, 16, "F2", 15, 23, 42);
+      y += 18;
+      line(margin, y, pageWidth - margin, y, 203, 213, 225);
+      y += 16;
+
+      if (!weekEntries.length) {
+        rect(margin, y, pageWidth - margin * 2, 38, 248, 250, 252);
+        text("No entries for this week.", margin + 14, y + 23, 10, "F1", 100, 116, 139);
+        y += 54;
+        return;
+      }
+
+      const grouped = weekEntries.reduce((acc, entry) => {
+        const employee = getEmployeeName(entry.employeeId);
+        const job = entry.customerName || "Unnamed Job";
+        const key = `${employee}__${job}`;
+        if (!acc[key]) acc[key] = { employee, job, jobType: entry.jobType || "Job", entries: [], hours: 0 };
+        acc[key].entries.push(entry);
+        acc[key].hours += entryHours(entry);
+        return acc;
+      }, {});
+
+      Object.values(grouped).forEach((group) => {
+        const noteLines = group.entries.flatMap((entry) => wrap(`${displayShortDate(entry.date)}: ${entry.notes || "No notes submitted."}`, 478, 9));
+        const needed = 92 + (group.entries.length * 15) + (noteLines.length * 11);
+        ensureSpace(Math.min(needed, 260));
+
+        rect(margin, y, pageWidth - margin * 2, 54, 15, 23, 42);
+        text(group.job, margin + 14, y + 20, 13, "F2", 255, 255, 255);
+        text(`${group.employee} • ${group.jobType} • ${group.hours.toFixed(2)} total hours`, margin + 14, y + 38, 9, "F1", 207, 250, 254);
+        y += 68;
+
+        text("Date", margin, y, 8, "F2", 100, 116, 139);
+        text("Time", margin + 102, y, 8, "F2", 100, 116, 139);
+        text("Lunch", margin + 220, y, 8, "F2", 100, 116, 139);
+        text("Hours", margin + 300, y, 8, "F2", 100, 116, 139);
+        text("Status", margin + 370, y, 8, "F2", 100, 116, 139);
+        y += 10;
+        line(margin, y, pageWidth - margin, y);
+        y += 14;
+
+        group.entries.forEach((entry) => {
+          ensureSpace(26);
+          text(displayShortDate(entry.date), margin, y, 9, "F1", 15, 23, 42);
+          text(`${entry.start || "--"}-${entry.end || "--"}`, margin + 102, y, 9, "F1", 15, 23, 42);
+          text(entry.lunchTaken ? `${entry.lunchMinutes || 0} min` : "No", margin + 220, y, 9, "F1", 15, 23, 42);
+          text(entryHours(entry).toFixed(2), margin + 300, y, 9, "F2", 15, 23, 42);
+          text(entry.approvalStatus || "pending", margin + 370, y, 9, "F1", 15, 23, 42);
+          y += 15;
+        });
+
+        y += 8;
+        text("Job Notes", margin, y, 10, "F2", 8, 145, 178);
+        y += 14;
+        group.entries.forEach((entry) => {
+          const lines = wrap(`${displayShortDate(entry.date)}: ${entry.notes || "No notes submitted."}`, 500, 9);
+          lines.forEach((lineText, index) => {
+            ensureSpace(18);
+            text(index === 0 ? `• ${lineText}` : `  ${lineText}`, margin + 10, y, 9, "F1", 51, 65, 85);
+            y += 11;
+          });
+          if (entry.photoUrl) {
+            ensureSpace(18);
+            text(`Documentation: ${entry.photoUrl}`, margin + 10, y, 8, "F1", 8, 145, 178);
+            y += 11;
+          }
+          if (entry.denialReason) {
+            ensureSpace(18);
+            text(`Denial reason: ${entry.denialReason}`, margin + 10, y, 8, "F1", 153, 27, 27);
+            y += 11;
+          }
+        });
+        y += 24;
+      });
+    };
+
+    renderWeek(`Week 1 • ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, weekOneSource);
+    renderWeek(`Week 2 • ${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, weekTwoSource);
+    finishPage();
+
+    const objects = [];
+    const addObject = (body) => {
+      objects.push(body);
+      return objects.length;
+    };
+    const fontRegular = addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    const fontBold = addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+    const pageRefs = [];
+    const contentRefs = [];
+    pages.forEach((stream) => {
+      const contentRef = addObject(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+      contentRefs.push(contentRef);
+      pageRefs.push(null);
+    });
+    const pagesRefPlaceholder = objects.length + pages.length + 2;
+    pages.forEach((_, index) => {
+      const pageRef = addObject(`<< /Type /Page /Parent ${pagesRefPlaceholder} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontRegular} 0 R /F2 ${fontBold} 0 R >> >> /Contents ${contentRefs[index]} 0 R >>`);
+      pageRefs[index] = pageRef;
+    });
+    const pagesRef = addObject(`<< /Type /Pages /Kids [${pageRefs.map((ref) => `${ref} 0 R`).join(" ")}] /Count ${pageRefs.length} >>`);
+    const catalogRef = addObject(`<< /Type /Catalog /Pages ${pagesRef} 0 R >>`);
+    const header = "%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n";
+    let body = header;
+    const offsets = [0];
+    objects.forEach((object, index) => {
+      offsets.push(body.length);
+      body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    });
+    const xrefStart = body.length;
+    body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    offsets.slice(1).forEach((offset) => { body += `${String(offset).padStart(10, "0")} 00000 n \n`; });
+    body += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogRef} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+    return new Blob([body], { type: "application/pdf" });
+  }
+
+  function exportModernHoursPdf(onlyApproved = false) {
+    const source = onlyApproved ? visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved") : visibleEntries;
+    const title = onlyApproved ? "Approved Payroll PDF" : "Hours & Job Notes PDF";
+    downloadBlob(createModernHoursPdf(source, title), `${onlyApproved ? "approved-payroll" : "voda-hours-notes"}-pay-period-${formatDate(weekStart)}.pdf`);
+  }
+
+  function exportPayrollPdf() {
+    exportModernHoursPdf(true);
   }
 
   async function addEntry() {
@@ -2061,6 +2274,7 @@ export default function RestorationHoursTracker() {
               exportCsv={exportCsv}
               exportDocumentationReport={exportDocumentationReport}
               exportPayrollPdf={exportPayrollPdf}
+              exportModernHoursPdf={exportModernHoursPdf}
               openDayDetail={openDayDetail}
             />}
 
@@ -2235,7 +2449,7 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
 }
 
 
-function DocumentationExportPanel({ currentUser, employees, visibleEntries, selectedEmployeeId, setSelectedEmployeeId, search, setSearch, employeeById, weekStart, setWeekStart, weekDates, weekTwoDates, exportCsv, exportDocumentationReport, exportPayrollPdf, openDayDetail }) {
+function DocumentationExportPanel({ currentUser, employees, visibleEntries, selectedEmployeeId, setSelectedEmployeeId, search, setSearch, employeeById, weekStart, setWeekStart, weekDates, weekTwoDates, exportCsv, exportDocumentationReport, exportPayrollPdf, exportModernHoursPdf, openDayDetail }) {
   const weekOneEntries = visibleEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
   const weekTwoEntries = visibleEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
   const periodSummary = summarizePayroll(visibleEntries);
@@ -2258,14 +2472,14 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Job documentation export</p>
               <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">Clean two-week notes review</h2>
-              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Full job notes stay expanded, Week 1 and Week 2 stay separated, and payroll totals are ready for admin review or employee records.</p>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Full job notes stay expanded, Week 1 and Week 2 stay separated, and clean CSV/PDF files are ready for payroll, admin review, or employee records.</p>
               <p className="mt-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-200">Phoenix time • {displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
               <Button variant="outline" onClick={() => setWeekStart(addDays(weekStart, -14))} className="border-white/15 bg-white/10 text-white hover:bg-white/15"><ChevronLeft className="mr-1 h-4 w-4" /> Prev</Button>
               <Button variant="outline" onClick={() => setWeekStart(getMonday(new Date()))} className="border-white/15 bg-white/10 text-white hover:bg-white/15">Current</Button>
               <Button variant="outline" onClick={() => setWeekStart(addDays(weekStart, 14))} className="border-white/15 bg-white/10 text-white hover:bg-white/15">Next <ChevronRight className="ml-1 h-4 w-4" /></Button>
-              <Button variant="cool" onClick={() => exportDocumentationReport(false)}><FileText className="mr-2 h-4 w-4" /> Export Notes</Button>
+              <Button variant="cool" onClick={() => exportModernHoursPdf(false)}><FileText className="mr-2 h-4 w-4" /> Export PDF</Button>
             </div>
           </div>
         </div>
@@ -2274,8 +2488,9 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
           <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto_auto]">
             {currentUser.role === "admin" && <select aria-label="Filter documentation by employee" value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="input"><option value="all">All employees</option>{employees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>}
             <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search job documentation" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search job, notes, employee..." /></div>
-            <Button variant="outline" onClick={() => exportCsv(false)} className="min-h-[48px]"><Download className="mr-2 h-4 w-4" /> CSV</Button>
-            {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Payroll PDF</Button>}
+            <Button variant="outline" onClick={() => exportCsv(false)} className="min-h-[48px]"><Download className="mr-2 h-4 w-4" /> Clean CSV</Button>
+            <Button variant="outline" onClick={() => exportModernHoursPdf(false)} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Clean PDF</Button>
+            {currentUser.role === "admin" && <Button variant="outline" onClick={exportPayrollPdf} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Approved PDF</Button>}
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-8">
