@@ -261,3 +261,74 @@ button { min-height: 38px; }
     border-radius: 1.35rem !important;
   }
 }
+
+/* App Store / native-container readiness polish */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+html {
+  background: #020617;
+}
+
+body {
+  min-height: 100dvh;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+}
+
+.mobile-safe {
+  min-height: 100dvh;
+  padding-top: max(0px, var(--safe-top));
+  padding-right: var(--safe-right);
+  padding-bottom: max(0px, var(--safe-bottom));
+  padding-left: var(--safe-left);
+}
+
+@media (display-mode: standalone) {
+  .mobile-safe {
+    padding-top: max(10px, var(--safe-top));
+    padding-bottom: max(10px, var(--safe-bottom));
+  }
+}
+
+button,
+[role="button"],
+a,
+select,
+input,
+textarea {
+  -webkit-touch-callout: none;
+}
+
+input,
+select,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Avoid iOS zoom-jump and make tap targets App Store friendly */
+button,
+a,
+.input,
+select,
+textarea,
+input {
+  min-height: 44px;
+}
+
+/* Better print/PDF fallbacks when exported from iOS WebView */
+@media print {
+  body { background: #fff !important; color: #111827 !important; }
+  .no-print { display: none !important; }
+}

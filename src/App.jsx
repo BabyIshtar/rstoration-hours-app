@@ -371,6 +371,19 @@ function normalizeEntry(entry) {
   };
 }
 
+
+function triggerNativeFeedback(style = "light") {
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(style === "success" ? 18 : 8);
+    const bridge = typeof window !== "undefined" ? window.Capacitor : null;
+    if (bridge?.Plugins?.Haptics?.impact) {
+      bridge.Plugins.Haptics.impact({ style: style === "success" ? "MEDIUM" : "LIGHT" });
+    }
+  } catch {
+    // Haptics are optional. Never block the field workflow.
+  }
+}
+
 function Button({ children, className = "", variant = "default", size = "default", ...props }) {
   const variants = {
     default: "bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200",
@@ -386,6 +399,8 @@ function Button({ children, className = "", variant = "default", size = "default
     lg: "px-5 py-3.5 text-sm",
   };
 
+  const { onClick, ...buttonProps } = props;
+
   return (
     <button
       className={cx(
@@ -394,7 +409,11 @@ function Button({ children, className = "", variant = "default", size = "default
         sizes[size] || sizes.default,
         className
       )}
-      {...props}
+      onClick={(event) => {
+        if (!buttonProps.disabled) triggerNativeFeedback(variant === "success" ? "success" : "light");
+        onClick?.(event);
+      }}
+      {...buttonProps}
     >
       {children}
     </button>
@@ -1757,7 +1776,7 @@ export default function RestorationHoursTracker() {
       <AnimatePresence>
         {showSplash && (
           <motion.div
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-[radial-gradient(circle_at_50%_10%,rgba(103,232,249,.18),transparent_30%),linear-gradient(180deg,#020617,#0f172a)] px-6"
             initial={{ opacity: 1 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1770,7 +1789,7 @@ export default function RestorationHoursTracker() {
               exit={{ opacity: 0, y: -10, scale: 1.04, filter: "blur(8px)" }}
               transition={{ duration: 1.12, ease: [0.22, 1, 0.36, 1] }}
             >
-              <img src={brandLogo} alt="Voda Of Tucson" className="h-28 w-auto object-contain brightness-0 invert sm:h-36" />
+              <img src={brandLogo} alt="Voda Of Tucson" className="h-28 w-auto object-contain brightness-0 invert drop-shadow-[0_0_30px_rgba(103,232,249,.22)] sm:h-36" />
               <div className="h-1 w-28 overflow-hidden rounded-full bg-white/10">
                 <motion.div className="h-full rounded-full bg-cyan-300" initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 1.25, ease: "easeOut" }} />
               </div>

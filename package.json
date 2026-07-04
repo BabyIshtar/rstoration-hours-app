@@ -1,13 +1,19 @@
 {
   "name": "restoration-hours-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:init": "npx cap init \"Voda Of Tucson Hours\" \"com.vodaoftucson.hours\" --web-dir=dist",
+    "cap:add:ios": "npm run build && npx cap add ios",
+    "cap:add:android": "npm run build && npx cap add android",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:open:ios": "npx cap open ios",
+    "cap:open:android": "npx cap open android"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
@@ -16,7 +22,12 @@
     "lucide-react": "^1.14.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "tailwindcss": "^4.3.0"
+    "tailwindcss": "^4.3.0",
+    "@capacitor/app": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/haptics": "^7.0.2",
+    "@capacitor/keyboard": "^7.0.3",
+    "@capacitor/status-bar": "^7.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -27,6 +38,10 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
-    "vite": "^8.0.10"
-  }
+    "vite": "^8.0.10",
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "@capacitor/android": "^7.4.3"
+  },
+  "description": "Voda Of Tucson field hours, approvals, and documentation tracker."
 }

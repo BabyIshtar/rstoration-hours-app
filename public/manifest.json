@@ -1,25 +1,24 @@
 {
-  "name": "Voda Of Tucson",
-  "short_name": "Voda Of Tucson",
-  "description": "Voda Of Tucson hours tracking app for field teams.",
+  "name": "Voda Of Tucson Hours",
+  "short_name": "VODA Hours",
+  "description": "Private Voda Of Tucson field hours, approvals, and documentation tracker.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#020617",
   "theme_color": "#020617",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
+  "categories": ["business", "productivity", "utilities"],
   "icons": [
-    {
-      "src": "/VODA CIRCLE W DOTS PNG.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/VODA CIRCLE W DOTS PNG.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "/voda-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/voda-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/voda-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/voda-icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ],
+  "screenshots": [
+    { "src": "/splash-iphone-pro.png", "sizes": "1179x2556", "type": "image/png", "form_factor": "narrow" },
+    { "src": "/splash-ipad.png", "sizes": "2048x2732", "type": "image/png", "form_factor": "wide" }
   ]
 }
