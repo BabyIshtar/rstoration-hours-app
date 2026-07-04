@@ -295,6 +295,23 @@ function isVacationEntry(entry) {
   return text.includes("vacation") || text.includes("pto") || text.includes("paid time off");
 }
 
+function entryApprovalStatus(entry) {
+  return String(entry?.approvalStatus || entry?.approval_status || entry?.status || "pending").toLowerCase();
+}
+
+function isPendingEntry(entry) {
+  return !["approved", "denied"].includes(entryApprovalStatus(entry));
+}
+
+function sortEntriesByDateTime(entries = []) {
+  return [...entries].sort((a, b) => `${a.date || ""} ${a.start || ""} ${a.customerName || ""}`.localeCompare(`${b.date || ""} ${b.start || ""} ${b.customerName || ""}`));
+}
+
+function phoenixMonthKey(value) {
+  const date = value instanceof Date ? value : phoenixDateKeyToDate(String(value));
+  return `${getPhoenixPart(date, "year", { year: "numeric", month: "2-digit" })}-${getPhoenixPart(date, "month", { year: "numeric", month: "2-digit" })}`;
+}
+
 function summarizePayroll(entries = []) {
   const activeEntries = entries.filter((entry) => !isDeniedEntry(entry));
   const totalHours = activeEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
@@ -372,7 +389,7 @@ function Button({ children, className = "", variant = "default", size = "default
   return (
     <button
       className={cx(
-        "inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl text-center font-bold leading-snug tracking-[-0.01em] transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0",
+        "inline-flex min-w-0 max-w-full items-center justify-center gap-2 rounded-2xl text-center font-bold leading-snug tracking-[-0.01em] transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0 [&>span]:min-w-0",
         variants[variant] || variants.default,
         sizes[size] || sizes.default,
         className
@@ -951,11 +968,11 @@ export default function RestorationHoursTracker() {
   }, [entries, payPeriodDates, currentUser, selectedEmployeeId, search]);
 
   const weeklyTotal = visibleEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
-  const pendingCount = visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())).length;
+  const pendingCount = visibleEntries.filter(isPendingEntry).length;
   const approvedPayrollTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
   const deniedHoursTotal = visibleEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "denied").reduce((sum, entry) => sum + entryHours(entry), 0);
   const [approvingAll, setApprovingAll] = useState(false);
-  const pendingApprovalEntries = useMemo(() => visibleEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())), [visibleEntries]);
+  const pendingApprovalEntries = useMemo(() => sortEntriesByDateTime(visibleEntries.filter(isPendingEntry)), [visibleEntries]);
   const approvalGroups = useMemo(() => {
     if (currentUser?.role !== "admin") return [];
     return employees
@@ -994,7 +1011,7 @@ export default function RestorationHoursTracker() {
           totalHours: employeeEntries.reduce((sum, entry) => sum + entryHours(entry), 0),
           approvedHours: employeeEntries.filter((entry) => entry.approvalStatus === "approved").reduce((sum, entry) => sum + entryHours(entry), 0),
           deniedHours: employeeEntries.filter((entry) => entry.approvalStatus === "denied").reduce((sum, entry) => sum + entryHours(entry), 0),
-          pendingCount: employeeEntries.filter((entry) => !["approved", "denied"].includes(String(entry.approvalStatus).toLowerCase())).length,
+          pendingCount: employeeEntries.filter(isPendingEntry).length,
         };
       })
       .filter((employee) => employee.totalHours > 0 || selectedEmployeeId !== "all");
@@ -1003,8 +1020,7 @@ export default function RestorationHoursTracker() {
   const historyEntries = useMemo(() => {
     if (currentUser?.role !== "admin") return [];
     return entries.filter((entry) => {
-      const entryDate = phoenixDateKeyToDate(entry.date);
-      const sameMonth = entryDate.getFullYear() === historyMonth.getFullYear() && entryDate.getMonth() === historyMonth.getMonth();
+      const sameMonth = phoenixMonthKey(entry.date) === phoenixMonthKey(historyMonth);
       const correctEmployee = selectedEmployeeId === "all" || entry.employeeId === selectedEmployeeId;
       return sameMonth && correctEmployee;
     });
@@ -1188,15 +1204,15 @@ export default function RestorationHoursTracker() {
   }
 
   function exportPayrollPdf() {
-    const reportEntries = visibleEntries.filter((entry) => String(entry.approvalStatus || entry.status || "").toLowerCase() !== "denied");
+    const reportEntries = sortEntriesByDateTime(visibleEntries.filter((entry) => entryApprovalStatus(entry) !== "denied"));
     const escapeHtml = (value) => String(value ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
 
-    const reportWeekOne = reportEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
-    const reportWeekTwo = reportEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const reportWeekOne = sortEntriesByDateTime(reportEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date)));
+    const reportWeekTwo = sortEntriesByDateTime(reportEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date)));
     const weekOneSummary = summarizePayroll(reportWeekOne);
     const weekTwoSummary = summarizePayroll(reportWeekTwo);
     const reportPeriodSummary = summarizePayroll(reportEntries);
@@ -1426,6 +1442,13 @@ export default function RestorationHoursTracker() {
       setApprovingAll(false);
       return setAppError(error.message);
     }
+    await Promise.all(pendingApprovalEntries.map((entry) => createPortalMessage({
+      recipientId: entry.employeeId,
+      title: "Hours approved",
+      body: `${entry.customerName} on ${displayDate(entry.date)} was approved.`,
+      relatedEntryId: entry.id,
+    })));
+    notifyUser("Pending hours approved", `${ids.length} pending entr${ids.length === 1 ? "y" : "ies"} approved and moved to history.`);
     await loadAppData();
     setApprovingAll(false);
   }
@@ -1553,7 +1576,7 @@ export default function RestorationHoursTracker() {
   }
 
   function exportCsv(onlyApproved = false) {
-    const source = onlyApproved ? visibleEntries.filter((entry) => entry.approvalStatus === "approved") : visibleEntries;
+    const source = sortEntriesByDateTime(onlyApproved ? visibleEntries.filter((entry) => entryApprovalStatus(entry) === "approved") : visibleEntries);
     const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const makeRows = (label, weekEntries, summary) => [
       [label],
@@ -1578,8 +1601,8 @@ export default function RestorationHoursTracker() {
       ["Summary", "Total Hours", summary.totalHours.toFixed(2), "Regular Hours", summary.regularHours.toFixed(2), "Overtime Hours", summary.overtimeHours.toFixed(2), "Vacation Hours", summary.vacationHours.toFixed(2)],
       [],
     ];
-    const weekOneSource = source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
-    const weekTwoSource = source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const weekOneSource = sortEntriesByDateTime(source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date)));
+    const weekTwoSource = sortEntriesByDateTime(source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date)));
     const periodSummary = summarizePayroll(source);
     const rows = [
       ["VODA Of Tucson Two-Week Timesheet + Job Notes Export"],
@@ -1601,9 +1624,9 @@ export default function RestorationHoursTracker() {
   }
 
   function exportDocumentationReport(onlyApproved = false) {
-    const source = onlyApproved ? visibleEntries.filter((entry) => entry.approvalStatus === "approved") : visibleEntries;
-    const weekOneSource = source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
-    const weekTwoSource = source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
+    const source = sortEntriesByDateTime(onlyApproved ? visibleEntries.filter((entry) => entryApprovalStatus(entry) === "approved") : visibleEntries);
+    const weekOneSource = sortEntriesByDateTime(source.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date)));
+    const weekTwoSource = sortEntriesByDateTime(source.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date)));
     const summary = summarizePayroll(source);
     const renderEntryCard = (entry) => `
       <article class="entry">
