@@ -15,6 +15,7 @@ import {
   Download,
   FileText,
   Fingerprint,
+  KeyRound,
   Edit3,
   LogOut,
   MessageSquare,
@@ -739,6 +740,7 @@ export default function RestorationHoursTracker() {
   const [editModal, setEditModal] = useState(null);
   const [dayDetail, setDayDetail] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [nextJobOpen, setNextJobOpen] = useState(false);
   const [activeSection, setActiveSection] = useState(() => localStorage.getItem("vodaActiveSection") || "dashboard");
   const [expandedApprovalGroups, setExpandedApprovalGroups] = useState({});
   const [messages, setMessages] = useState([]);
@@ -1138,16 +1140,44 @@ export default function RestorationHoursTracker() {
     setInstallPrompt(null);
   }
 
-  function startLiveShift() {
+  async function changePassword(newPassword) {
+    const password = String(newPassword || "");
+    if (password.length < 6) throw new Error("Password must be at least 6 characters.");
+    if (!/[^A-Za-z0-9]/.test(password)) throw new Error("Password must include at least 1 special character.");
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    notifyUser("Password updated", "Your VODA portal password was changed successfully.");
+  }
+
+  function beginLiveShiftForJob(job = null) {
     const startedAt = new Date();
+    const nextForm = {
+      ...form,
+      date: formatDate(startedAt),
+      start: formatPhoenixTime(startedAt),
+      end: formatPhoenixTime(startedAt),
+      jobId: job?.id || null,
+      jobType: job?.jobType || form.jobType || jobTypes[0],
+      customerName: job?.customerName || "",
+      notes: "",
+      photoUrl: "",
+      employeeSignature: "",
+      lunchTaken: false,
+      lunchMinutes: 0,
+    };
+    setForm(nextForm);
     setLiveShift({
       startedAt: startedAt.toISOString(),
-      date: formatDate(startedAt),
-      jobId: form.jobId || null,
-      jobType: form.jobType,
-      customerName: form.customerName || "",
+      date: nextForm.date,
+      jobId: nextForm.jobId,
+      jobType: nextForm.jobType,
+      customerName: nextForm.customerName,
     });
-    setForm((current) => ({ ...current, date: formatDate(startedAt), start: formatPhoenixTime(startedAt) }));
+    setNextJobOpen(false);
+  }
+
+  function startLiveShift() {
+    beginLiveShiftForJob(form.jobId ? jobs.find((job) => job.id === form.jobId) || null : null);
   }
 
   function stopLiveShiftAndFillForm() {
@@ -1241,15 +1271,15 @@ export default function RestorationHoursTracker() {
 
     const renderRows = (weekEntries) => weekEntries.map((entry) => {
       const notes = String(entry.notes || "").trim();
-      return `<tr>
+      return `<tr class="job-row">
         <td><b>${escapeHtml(employeeName(entry))}</b><small>${escapeHtml(entry.jobType || "Job")}</small></td>
         <td>${escapeHtml(displayShortDate(entry.date))}</td>
         <td><b>${escapeHtml(entry.customerName || "Unnamed Job")}</b></td>
         <td>${escapeHtml(timeRange(entry))}</td>
         <td class="hours">${entryHours(entry).toFixed(2)}</td>
         <td><span class="status ${escapeHtml(String(entry.approvalStatus || "pending").toLowerCase())}">${escapeHtml(entry.approvalStatus || "pending")}</span></td>
-        <td class="notes">${notes ? escapeHtml(notes) : "No notes submitted."}</td>
-      </tr>`;
+      </tr>
+      <tr class="notes-row"><td colspan="6"><div class="inline-notes"><small>Job Notes</small><p>${notes ? escapeHtml(notes) : "No notes submitted."}</p></div></td></tr>`;
     }).join("");
 
     const renderWeek = (label, range, entries, summary) => `
@@ -1262,19 +1292,27 @@ export default function RestorationHoursTracker() {
           <div class="week-total"><small>Week Total</small><b>${summary.totalHours.toFixed(2)} hrs</b></div>
         </div>
         <table>
-          <thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Status</th><th>Job Notes</th></tr></thead>
-          <tbody>${entries.length ? renderRows(entries) : '<tr><td colspan="7" class="empty">No submitted entries for this week.</td></tr>'}</tbody>
+          <thead><tr><th>Employee</th><th>Date</th><th>Job</th><th>Time</th><th>Hours</th><th>Status</th></tr></thead>
+          <tbody>${entries.length ? renderRows(entries) : '<tr><td colspan="6" class="empty">No submitted entries for this week.</td></tr>'}</tbody>
         </table>
       </section>`;
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>VODA Payroll ${displayDate(weekStart)}</title><style>
-      *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;margin:0;background:#f5f8fa;color:#0f172a;padding:28px}.sheet{max-width:1180px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a 0%,#173a44 52%,#0e7490 100%);color:white;border-radius:30px;padding:30px;box-shadow:0 22px 70px rgba(15,23,42,.18)}.pill{display:inline-flex;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:8px 13px;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}h1{margin:16px 0 8px;font-size:36px;letter-spacing:-.055em;line-height:1}.subtitle{margin:0;color:#d7fbff;font-weight:750}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:18px 0 10px}.box{background:white;border:1px solid #e2e8f0;border-radius:22px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.06)}.box small,.week-total small,td small{display:block;color:#64748b;font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase}.box b{display:block;margin-top:5px;font-size:22px;letter-spacing:-.04em}.box.ot-zero b{color:#64748b}.week{break-inside:avoid;margin-top:24px;background:white;border:1px solid #dbeafe;border-radius:26px;padding:18px;box-shadow:0 12px 36px rgba(15,23,42,.07)}.week-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.week-title p{margin:0;color:#0891b2;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}.week-title h2{margin:4px 0 0;font-size:24px;letter-spacing:-.05em}.week-total{text-align:right;background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:10px 12px;min-width:150px}.week-total b{font-size:18px}table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;overflow:hidden;border-radius:18px;border:1px solid #e2e8f0}th{background:#0f172a;color:white;text-align:left;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:11px 10px}td{vertical-align:top;border-top:1px solid #e2e8f0;padding:12px 10px;font-size:12px;line-height:1.45;color:#1e293b;overflow-wrap:anywhere;word-break:normal}td:nth-child(1){width:17%}td:nth-child(2){width:10%}td:nth-child(3){width:18%}td:nth-child(4){width:11%}.hours{width:8%;font-weight:950;color:#0e7490}.status{display:inline-block;border-radius:999px;padding:5px 8px;font-size:9px;text-transform:uppercase;font-weight:950;background:#fef3c7;color:#92400e}.status.approved{background:#dcfce7;color:#166534}.status.denied{background:#fee2e2;color:#991b1b}.notes{width:31%;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;color:#0f172a}.empty{text-align:center;color:#64748b;font-weight:800;padding:22px}.foot{margin:18px 0;color:#64748b;font-size:11px;font-weight:700}.no-print{display:block;margin-top:18px;color:#64748b;font-size:12px;font-weight:700}@media print{body{background:white;padding:0}.hero,.box,.week{box-shadow:none}.no-print{display:none}.sheet{max-width:none}.summary{grid-template-columns:repeat(3,1fr)}.week{page-break-inside:avoid}}@media(max-width:800px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.week-title{align-items:flex-start;flex-direction:column}.week-total{text-align:left}table{table-layout:auto}.notes{min-width:260px}}
+    const reportPerson = selectedEmployeeId && selectedEmployeeId !== "all"
+      ? employeeById.get(selectedEmployeeId)
+      : currentUser;
+    const reportName = String(reportPerson?.name || "VODA Employee").trim().split(/\s+/);
+    const firstName = (reportPerson?.firstName || reportName[0] || "Employee").replace(/[^a-zA-Z0-9-]/g, "");
+    const lastName = (reportPerson?.lastName || reportName.slice(1).join("_") || "Payroll").replace(/[^a-zA-Z0-9_-]/g, "");
+    const payrollFilename = `${firstName}_${lastName}_${formatDate(weekStart)}_Payroll`;
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${payrollFilename}</title><style>
+      *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;margin:0;background:#f5f8fa;color:#0f172a;padding:28px}.sheet{max-width:1180px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a 0%,#173a44 52%,#0e7490 100%);color:white;border-radius:30px;padding:30px;box-shadow:0 22px 70px rgba(15,23,42,.18)}.pill{display:inline-flex;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:8px 13px;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}h1{margin:16px 0 8px;font-size:36px;letter-spacing:-.055em;line-height:1}.subtitle{margin:0;color:#d7fbff;font-weight:750}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:18px 0 10px}.box{background:white;border:1px solid #e2e8f0;border-radius:22px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.06)}.box small,.week-total small,td small{display:block;color:#64748b;font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase}.box b{display:block;margin-top:5px;font-size:22px;letter-spacing:-.04em}.box.ot-zero b{color:#64748b}.week{break-inside:avoid;margin-top:24px;background:white;border:1px solid #dbeafe;border-radius:26px;padding:18px;box-shadow:0 12px 36px rgba(15,23,42,.07)}.week-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.week-title p{margin:0;color:#0891b2;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}.week-title h2{margin:4px 0 0;font-size:24px;letter-spacing:-.05em}.week-total{text-align:right;background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:10px 12px;min-width:150px}.week-total b{font-size:18px}table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;overflow:hidden;border-radius:18px;border:1px solid #e2e8f0}th{background:#0f172a;color:white;text-align:left;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:11px 10px}td{vertical-align:top;border-top:1px solid #e2e8f0;padding:12px 10px;font-size:12px;line-height:1.45;color:#1e293b;overflow-wrap:anywhere;word-break:normal}td:nth-child(1){width:17%}td:nth-child(2){width:10%}td:nth-child(3){width:18%}td:nth-child(4){width:11%}.hours{width:9%;font-weight:950;color:#0e7490}.status{display:inline-block;border-radius:999px;padding:5px 8px;font-size:9px;text-transform:uppercase;font-weight:950;background:#fef3c7;color:#92400e}.status.approved{background:#dcfce7;color:#166534}.status.denied{background:#fee2e2;color:#991b1b}.job-row td{border-bottom:0}.notes-row td{padding:0 10px 12px;background:#fbfdff}.inline-notes{border-left:3px solid #22d3ee;background:#f1f5f9;border-radius:12px;padding:10px 12px}.inline-notes small{margin-bottom:4px}.inline-notes p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;color:#0f172a}.empty{text-align:center;color:#64748b;font-weight:800;padding:22px}.foot{margin:18px 0;color:#64748b;font-size:11px;font-weight:700}.no-print{display:block;margin-top:18px;color:#64748b;font-size:12px;font-weight:700}@media print{body{background:white;padding:0}.hero,.box,.week{box-shadow:none}.no-print{display:none}.sheet{max-width:none}.summary{grid-template-columns:repeat(3,1fr)}.week{page-break-inside:avoid}}@media(max-width:800px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.week-title{align-items:flex-start;flex-direction:column}.week-total{text-align:left}table{table-layout:auto}.inline-notes{min-width:0}}
     </style></head><body><main class="sheet"><section class="hero"><span class="pill">VODA Of Tucson</span><h1>Hours Report</h1><p class="subtitle">Two-week pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Submitted and approved hours • Phoenix time</p></section><section class="summary"><div class="box"><small>Week 1</small><b>${weekOneSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${weekTwoSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Period Total</small><b>${reportPeriodSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${reportPeriodSummary.regularHours.toFixed(2)}h</b></div><div class="box ${reportPeriodSummary.overtimeHours <= 0 ? "ot-zero" : ""}"><small>Overtime</small><b>${reportPeriodSummary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${reportPeriodSummary.vacationHours.toFixed(2)}h</b></div></section>${renderWeek(`Week 1`, `${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, reportWeekOne, weekOneSummary)}${renderWeek(`Week 2`, `${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, reportWeekTwo, weekTwoSummary)}<p class="foot">Overtime is calculated per employee per week only after 40 worked hours. Vacation/PTO is tracked separately and does not create overtime.</p><p class="no-print">Use your browser print option and select Save as PDF.</p></main></body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `voda-hours-report-pay-period-${formatDate(weekStart)}.html`;
+    link.download = `${payrollFilename}.html`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -1322,7 +1360,7 @@ export default function RestorationHoursTracker() {
     await loadAppData();
   }
 
-  async function submitRecordedShift() {
+  async function submitRecordedShift(startAnother = false) {
     if (!currentUser || !stoppedShiftReview) return;
     if (!stoppedShiftReview.customerName.trim()) {
       setAppError("Please enter a job name or customer name before submitting the recorded shift.");
@@ -1364,6 +1402,7 @@ export default function RestorationHoursTracker() {
         employeeSignature: "",
       });
       setActiveSection("timesheets");
+      if (startAnother) setNextJobOpen(true);
       setAppError("You are offline, so this recorded shift was saved locally and will sync when the connection returns.");
       return;
     }
@@ -1381,6 +1420,7 @@ export default function RestorationHoursTracker() {
       employeeSignature: "",
     });
     setActiveSection("timesheets");
+    if (startAnother) setNextJobOpen(true);
     await loadAppData();
   }
 
@@ -2246,7 +2286,8 @@ export default function RestorationHoursTracker() {
         </main>
       </div>
 
-      {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} />}
+      {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} changePassword={changePassword} />}
+      {nextJobOpen && <NextJobModal activeJobs={activeJobs} onStart={beginLiveShiftForJob} onClose={() => setNextJobOpen(false)} />}
       {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} activeJobs={activeJobs} jobs={jobs} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
@@ -2307,6 +2348,21 @@ function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFi
   );
 }
 
+function NextJobModal({ activeJobs = [], onStart, onClose }) {
+  const [search, setSearch] = useState("");
+  const filteredJobs = activeJobs.filter((job) => `${job.customerName || ""} ${job.jobNumber || ""} ${job.jobType || ""}`.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <div className="fixed inset-0 z-[55] flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
+      <motion.div initial={{ opacity: 0, y: 22, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[88vh] w-full max-w-xl overflow-auto rounded-[2rem] border border-white/60 bg-slate-50/95 p-5 shadow-2xl dark:border-white/10 dark:bg-slate-950/95">
+        <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Previous job submitted</p><h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">Start the next job</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Choose a saved job and the new timer starts immediately.</p></div><Button variant="ghost" onClick={onClose}><X className="h-5 w-5" /></Button></div>
+        <div className="relative mt-4"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-11" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search customer, job number, or type…" /></div>
+        <div className="mt-3 space-y-2">{filteredJobs.map((job) => <button key={job.id} type="button" onClick={() => onStart(job)} className="w-full rounded-3xl border border-white/70 bg-white/75 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/5"><p className="font-black text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</p></button>)}{!filteredJobs.length && <div className="rounded-3xl border border-dashed border-slate-300 p-5 text-center text-sm font-bold text-slate-500 dark:border-white/10">No matching active jobs.</div>}</div>
+        <Button variant="outline" className="mt-4 w-full" onClick={() => onStart(null)}><Plus className="mr-2 h-4 w-4" /> Start Manual Job</Button>
+      </motion.div>
+    </div>
+  );
+}
+
 function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitRecordedShift, activeJobs = [], jobs = [] }) {
   function applyRecordedJob(jobId) {
     const selectedJob = jobs.find((job) => job.id === jobId);
@@ -2352,9 +2408,10 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
           <p className="mt-1 text-xs font-bold text-slate-300">This will be submitted as pending until an admin approves it.</p>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2">
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
           <Button variant="outline" onClick={() => setStoppedShiftReview(null)} className="py-3">Cancel</Button>
-          <Button variant="cool" onClick={submitRecordedShift} className="py-3" disabled={!stoppedShiftReview.customerName.trim() || !String(stoppedShiftReview.notes || "").trim()}><Send className="mr-2 h-4 w-4" /> Submit Hours</Button>
+          <Button variant="outline" onClick={() => submitRecordedShift(false)} className="py-3" disabled={!stoppedShiftReview.customerName.trim() || !String(stoppedShiftReview.notes || "").trim()}><Send className="mr-2 h-4 w-4" /> Submit</Button>
+          <Button variant="cool" onClick={() => submitRecordedShift(true)} className="py-3" disabled={!stoppedShiftReview.customerName.trim() || !String(stoppedShiftReview.notes || "").trim()}><Clock className="mr-2 h-4 w-4" /> Submit & Start Next</Button>
         </div>
       </motion.div>
     </div>
@@ -2593,7 +2650,25 @@ function PortalMessages({ messages, employees, currentUser, messageForm, setMess
   );
 }
 
-function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOpen, saveProfile, uploadProfilePicture }) {
+function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOpen, saveProfile, uploadProfilePicture, changePassword }) {
+  const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const passwordValid = passwordForm.password.length >= 6 && /[^A-Za-z0-9]/.test(passwordForm.password) && passwordForm.password === passwordForm.confirm;
+  async function submitPasswordChange() {
+    setPasswordMessage("");
+    if (passwordForm.password !== passwordForm.confirm) return setPasswordMessage("Passwords do not match.");
+    setPasswordSaving(true);
+    try {
+      await changePassword(passwordForm.password);
+      setPasswordForm({ password: "", confirm: "" });
+      setPasswordMessage("Password changed successfully.");
+    } catch (error) {
+      setPasswordMessage(error.message || "Unable to change password.");
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
   const previewUser = { ...currentUser, firstName: profileForm.firstName, lastName: profileForm.lastName, avatarUrl: profileForm.avatarUrl, name: `${profileForm.firstName} ${profileForm.lastName}`.trim() || currentUser.name };
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
@@ -2629,6 +2704,12 @@ function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOp
               </label>
             </Field>
           </div>
+        </div>
+
+        <div className="mt-5 rounded-3xl border border-white/70 bg-white/75 p-4 dark:border-white/10 dark:bg-white/5">
+          <div className="mb-3 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-cyan-200 dark:bg-cyan-400/10"><KeyRound className="h-4 w-4" /></div><div><p className="font-black">Change Password</p><p className="text-xs font-bold text-slate-500 dark:text-slate-400">At least 6 characters and 1 special character.</p></div></div>
+          <div className="grid gap-3 sm:grid-cols-2"><Field label="New Password"><input type="password" autoComplete="new-password" value={passwordForm.password} onChange={(e) => setPasswordForm({ ...passwordForm, password: e.target.value })} className="input" placeholder="New password" /></Field><Field label="Confirm Password"><input type="password" autoComplete="new-password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="input" placeholder="Confirm password" /></Field></div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className={cx("text-xs font-bold", passwordMessage.includes("successfully") ? "text-emerald-600" : "text-slate-500 dark:text-slate-400")}>{passwordMessage || "Use a symbol such as !, @, #, $, %, or &."}</p><Button type="button" variant="outline" onClick={submitPasswordChange} disabled={!passwordValid || passwordSaving}>{passwordSaving ? "Updating…" : "Update Password"}</Button></div>
         </div>
 
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
