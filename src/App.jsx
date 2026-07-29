@@ -56,6 +56,24 @@ const iconLogo = "/VODA CIRCLE W DOTS PNG.png";
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const employeeRoles = ["admin", "manager", "tech", "employee"];
 const jobStatuses = ["active", "scheduled", "in progress", "on hold", "completed", "closed"];
+const DAILY_CLOCK_REMINDER_HOUR = 7;
+const DAILY_CLOCK_REMINDER_MINUTE = 55;
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
+}
+
+function phoenixDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Phoenix", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function phoenixClockParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Phoenix", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
 
 const loginTips = [
   { title: "Water Damage Tip", text: "Start drying within the first 24–48 hours whenever possible. Fast airflow and moisture checks help prevent hidden secondary damage." },
@@ -717,6 +735,7 @@ export default function RestorationHoursTracker() {
   const [now, setNow] = useState(new Date());
   const [installPrompt, setInstallPrompt] = useState(null);
   const [notificationPermission, setNotificationPermission] = useState(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
+  const [dailyClockReminder, setDailyClockReminder] = useState(() => localStorage.getItem("vodaDailyClockReminder") !== "off");
   const [offlineQueue, setOfflineQueue] = useState(() => {
     try { return JSON.parse(localStorage.getItem("vodaOfflineQueue") || "[]"); } catch { return []; }
   });
@@ -728,6 +747,7 @@ export default function RestorationHoursTracker() {
   const [isPhotoUploading, setIsPhotoUploading] = useState(false);
   const swipeStartX = useRef(null);
   const refreshStartY = useRef(null);
+  const appOpenedAtRef = useRef(new Date());
   const loginTip = useMemo(() => loginTips[Math.floor(Math.random() * loginTips.length)], []);
 
   const [employees, setEmployees] = useState([]);
@@ -862,6 +882,65 @@ export default function RestorationHoursTracker() {
     localStorage.setItem("vodaActiveSection", activeSection);
   }, [activeSection]);
 
+  useEffect(() => {
+    localStorage.setItem("vodaDailyClockReminder", dailyClockReminder ? "on" : "off");
+    if (currentUser?.id) supabase.from("push_subscriptions").update({ enabled: dailyClockReminder, updated_at: new Date().toISOString() }).eq("user_id", currentUser.id).then(() => {});
+  }, [dailyClockReminder, currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const today = phoenixDateKey();
+    localStorage.setItem("vodaLastAccessDate", today);
+    supabase.from("app_daily_activity").upsert({ user_id: currentUser.id, activity_date: today, last_accessed_at: new Date().toISOString() }, { onConflict: "user_id,activity_date" }).then(({ error }) => {
+      if (error && !String(error.message || "").toLowerCase().includes("app_daily_activity")) console.warn("Unable to record app activity", error);
+    });
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id || !dailyClockReminder || notificationPermission !== "granted") return;
+    const checkReminder = () => {
+      const parts = phoenixClockParts();
+      const weekday = parts.weekday;
+      const hour = Number(parts.hour);
+      const minute = Number(parts.minute);
+      const today = phoenixDateKey();
+      const reminderKey = `vodaClockReminderShown:${today}`;
+      const isWeekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday);
+      const isAfterReminder = hour > DAILY_CLOCK_REMINDER_HOUR || (hour === DAILY_CLOCK_REMINDER_HOUR && minute >= DAILY_CLOCK_REMINDER_MINUTE);
+      const openedParts = phoenixClockParts(appOpenedAtRef.current);
+      const openedHour = Number(openedParts.hour);
+      const openedMinute = Number(openedParts.minute);
+      const wasOpenBeforeReminder = phoenixDateKey(appOpenedAtRef.current) < today || openedHour < DAILY_CLOCK_REMINDER_HOUR || (openedHour === DAILY_CLOCK_REMINDER_HOUR && openedMinute < DAILY_CLOCK_REMINDER_MINUTE);
+      const hasClockedToday = Boolean(liveShift && phoenixDateKey(new Date(liveShift.startedAt)) === today) || entries.some((entry) => entry.employeeId === currentUser.id && entry.date === today);
+      if (isWeekday && isAfterReminder && wasOpenBeforeReminder && !hasClockedToday && localStorage.getItem(reminderKey) !== "yes") {
+        notifyUser("Time clock reminder", "Good morning — remember to start your VODA time clock for today.");
+        localStorage.setItem(reminderKey, "yes");
+      }
+    };
+    checkReminder();
+    const reminderTimer = window.setInterval(checkReminder, 60 * 1000);
+    return () => window.clearInterval(reminderTimer);
+  }, [currentUser?.id, dailyClockReminder, notificationPermission, liveShift, entries]);
+
+  useEffect(() => {
+    if (!currentUser?.id || liveShift) return;
+    const storageKey = `vodaEntryDraft:${currentUser.id}`;
+    const savedDraft = localStorage.getItem(storageKey);
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed?.customerName || parsed?.notes || parsed?.jobId) setForm((current) => ({ ...current, ...parsed, date: parsed.date || current.date }));
+      } catch { /* ignore stale draft */ }
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id || liveShift) return;
+    const storageKey = `vodaEntryDraft:${currentUser.id}`;
+    const draftTimer = window.setTimeout(() => localStorage.setItem(storageKey, JSON.stringify(form)), 350);
+    return () => window.clearTimeout(draftTimer);
+  }, [form, currentUser?.id, liveShift]);
+
 
   useEffect(() => {
     const lastOpened = Number(localStorage.getItem("vodaLastOpenedAt") || 0);
@@ -971,6 +1050,7 @@ export default function RestorationHoursTracker() {
   }
 
   async function handleLogout() {
+    if (liveShift && !window.confirm("A time clock is still running. Log out and leave the timer running on this device?")) return;
     await supabase.auth.signOut();
     setSession(null);
     setCurrentUser(null);
@@ -1020,6 +1100,14 @@ export default function RestorationHoursTracker() {
     overtimeHours: weekOneSummary.overtimeHours + weekTwoSummary.overtimeHours,
     vacationHours: weekOneSummary.vacationHours + weekTwoSummary.vacationHours,
   };
+
+  const todayKey = phoenixDateKey();
+  const personalEntries = currentUser?.role === "admin" ? visibleEntries : entries.filter((entry) => entry.employeeId === currentUser?.id);
+  const todayEntries = personalEntries.filter((entry) => entry.date === todayKey);
+  const currentWeekStart = formatDate(getMonday(phoenixDateKeyToDate(todayKey)));
+  const currentWeekDates = Array.from({ length: 7 }, (_, index) => formatDate(addDays(phoenixDateKeyToDate(currentWeekStart), index)));
+  const currentWeekEntries = personalEntries.filter((entry) => currentWeekDates.includes(entry.date));
+  const recentJobNames = [...new Set(sortEntriesByDateTime(personalEntries).reverse().map((entry) => entry.customerName).filter(Boolean))];
 
   const employeeSummaries = useMemo(() => {
     if (currentUser?.role !== "admin") return [];
@@ -1116,21 +1204,51 @@ export default function RestorationHoursTracker() {
     await loadAppData();
   }
 
-  function notifyUser(title, body) {
-    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      new Notification(title, { body, icon: iconLogo });
-    }
+  async function notifyUser(title, body) {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    try {
+      const registration = await navigator.serviceWorker?.ready;
+      if (registration?.showNotification) return registration.showNotification(title, { body, icon: iconLogo, badge: iconLogo, tag: "voda-hours", renotify: true, data: { url: "/" } });
+    } catch { /* use browser notification fallback */ }
+    new Notification(title, { body, icon: iconLogo });
+  }
+
+  async function registerPushSubscription() {
+    const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+    if (!vapidPublicKey || !currentUser?.id || !("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
+    const json = subscription.toJSON();
+    const { error } = await supabase.from("push_subscriptions").upsert({
+      user_id: currentUser.id,
+      endpoint: subscription.endpoint,
+      p256dh: json.keys?.p256dh,
+      auth: json.keys?.auth,
+      enabled: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "endpoint" });
+    if (error) throw error;
+    return true;
   }
 
   async function requestNotifications() {
     if (typeof Notification === "undefined") {
       setNotificationPermission("unsupported");
-      setAppError("Push-style browser notifications are not supported on this device/browser.");
+      setAppError("Notifications are not supported on this device/browser.");
       return;
     }
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-    if (permission === "granted") notifyUser("VODA notifications enabled", "You will be able to receive portal-style updates while the app is open.");
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === "granted") {
+        await registerPushSubscription();
+        setDailyClockReminder(true);
+        notifyUser("VODA notifications enabled", "Weekday time-clock reminders are enabled for 7:55 AM.");
+      }
+    } catch (error) {
+      setAppError(error.message || "Notifications could not be enabled on this device.");
+    }
   }
 
   async function installApp() {
@@ -1347,6 +1465,7 @@ export default function RestorationHoursTracker() {
     if (!navigator.onLine) {
       setOfflineQueue((current) => [...current, payload]);
       setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+      localStorage.removeItem(`vodaEntryDraft:${currentUser.id}`);
       setActiveSection("timesheets");
       setAppError("You are offline, so this entry was saved locally and will sync when the connection returns.");
       return;
@@ -1356,6 +1475,7 @@ export default function RestorationHoursTracker() {
     if (error) return setAppError(error.message);
     notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
     setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
+    localStorage.removeItem(`vodaEntryDraft:${currentUser.id}`);
     setActiveSection("timesheets");
     await loadAppData();
   }
@@ -1884,6 +2004,18 @@ export default function RestorationHoursTracker() {
 
         <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
+            {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <EmployeeTodayPanel
+              currentUser={currentUser}
+              liveShift={liveShift}
+              elapsed={liveShiftElapsed()}
+              todayEntries={todayEntries}
+              weekEntries={currentWeekEntries}
+              recentJobs={recentJobNames}
+              onStart={startLiveShift}
+              onAddHours={() => goToSection("add")}
+              onOpenTimesheets={() => goToSection("timesheets")}
+            />}
+
             {activeSection === "dashboard" && appLoading && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
               {Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} />)}
             </div>}
@@ -2192,6 +2324,15 @@ export default function RestorationHoursTracker() {
           </motion.section>
 
           <motion.aside {...softMotion} transition={{ ...spring, delay: 0.12 }} className="min-w-0 space-y-4 sm:space-y-5">
+            {currentUser.role === "admin" && activeSection === "dashboard" && <AdminTeamSnapshot
+              employees={employees}
+              entries={entries}
+              liveShift={liveShift}
+              pendingCount={pendingCount}
+              onReview={() => goToSection("review")}
+              onHistory={() => goToSection("history")}
+            />}
+
             {currentUser.role === "admin" && activeSection === "dashboard" && (
               <Card>
                 <CardContent>
@@ -2286,7 +2427,7 @@ export default function RestorationHoursTracker() {
         </main>
       </div>
 
-      {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} changePassword={changePassword} />}
+      {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} changePassword={changePassword} notificationPermission={notificationPermission} requestNotifications={requestNotifications} dailyClockReminder={dailyClockReminder} setDailyClockReminder={setDailyClockReminder} />}
       {nextJobOpen && <NextJobModal activeJobs={activeJobs} onStart={beginLiveShiftForJob} onClose={() => setNextJobOpen(false)} />}
       {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} activeJobs={activeJobs} jobs={jobs} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
@@ -2320,6 +2461,59 @@ function CapabilityDock({ installPrompt, installApp, notificationPermission, req
   );
 }
 
+
+function EmployeeTodayPanel({ currentUser, liveShift, elapsed, todayEntries, weekEntries, recentJobs, onStart, onAddHours, onOpenTimesheets }) {
+  const todayHours = todayEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+  const weekHours = weekEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+  const progress = Math.min(100, (weekHours / 40) * 100);
+  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Phoenix", hour: "numeric", hour12: false }).format(new Date()));
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  return (
+    <Card className="overflow-hidden border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/20">
+      <CardContent className="relative p-5 sm:p-6">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-cyan-400/20 blur-3xl" />
+        <div className="relative">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">Today at VODA</p>
+          <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">{greeting}, {currentUser?.firstName || String(currentUser?.name || "Team").split(" ")[0]}</h2>
+          <p className="mt-2 text-sm font-semibold text-slate-300">Your current shift, today’s work, and fastest next actions are all here.</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Today</p><p className="mt-1 text-2xl font-black">{todayHours.toFixed(2)}h</p></div>
+            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">This week</p><p className="mt-1 text-2xl font-black">{weekHours.toFixed(2)}h</p></div>
+            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Clock status</p><p className="mt-1 clean-wrap text-base font-black text-cyan-200">{liveShift ? elapsed : "Not clocked in"}</p></div>
+          </div>
+          <div className="mt-4 rounded-3xl border border-white/10 bg-white/[0.055] p-4">
+            <div className="mb-2 flex items-center justify-between gap-3"><span className="text-xs font-black text-slate-300">Weekly progress</span><span className="text-xs font-black text-cyan-200">{weekHours.toFixed(1)} / 40h</span></div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: .7 }} className="h-full rounded-full bg-cyan-400" /></div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {!liveShift && <Button type="button" variant="cool" onClick={onStart} className="min-h-12"><Fingerprint className="h-4 w-4" /> Start Clock</Button>}
+            <Button type="button" variant="outline" onClick={onAddHours} className="min-h-12 border-white/15 bg-white/10 text-white hover:bg-white/15"><Plus className="h-4 w-4" /> Add Hours</Button>
+            <Button type="button" variant="outline" onClick={onOpenTimesheets} className="min-h-12 border-white/15 bg-white/10 text-white hover:bg-white/15"><CalendarDays className="h-4 w-4" /> Timesheet</Button>
+          </div>
+          {recentJobs.length > 0 && <div className="mt-4"><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Recent jobs</p><div className="flex flex-wrap gap-2">{recentJobs.slice(0,3).map((job) => <span key={job} className="clean-wrap rounded-full border border-white/10 bg-white/[0.07] px-3 py-2 text-xs font-bold text-slate-200">{job}</span>)}</div></div>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminTeamSnapshot({ employees, entries, liveShift, pendingCount, onReview, onHistory }) {
+  const todayKey = phoenixDateKey();
+  const todayEntries = entries.filter((entry) => entry.date === todayKey);
+  const activeEmployees = new Set(todayEntries.map((entry) => entry.employeeId)).size + (liveShift ? 1 : 0);
+  const todayHours = todayEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+  return (
+    <Card>
+      <CardContent>
+        <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Team Today</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">At-a-glance operations</h2></div><Activity className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
+        <div className="mt-4 grid grid-cols-3 gap-2"><MiniStat label="Active" value={activeEmployees} tone="cyan" /><MiniStat label="Today" value={`${todayHours.toFixed(1)}h`} tone="emerald" /><MiniStat label="Pending" value={pendingCount} tone="amber" /></div>
+        <div className="mt-4 grid grid-cols-2 gap-2"><Button variant="cool" onClick={onReview}>Review Hours</Button><Button variant="outline" onClick={onHistory}>View History</Button></div>
+        <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">{employees.filter((employee) => employee.active !== false).length} active employee profiles.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFillForm, form }) {
   return (
     <Card className="overflow-hidden border-cyan-200/70 bg-gradient-to-br from-white/80 via-slate-50/70 to-cyan-50/50 dark:border-cyan-300/10 dark:from-slate-950/60 dark:via-slate-900/60 dark:to-cyan-950/30">
@@ -2331,15 +2525,15 @@ function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFi
             </div>
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Live clock-in timer</p>
-              <h2 className="text-xl font-black tracking-[-0.04em]">{liveShift ? elapsed : "Ready"}</h2>
+              <h2 className={cx("font-black tabular-nums tracking-[-0.05em]", liveShift ? "text-4xl sm:text-5xl" : "text-2xl")}>{liveShift ? elapsed : "Ready to work"}</h2>
               <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{liveShift ? (liveShift.customerName || form.customerName || "Active job timer") : "Start a timer and it will keep running until you stop and review it."}</p>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:flex">
             {!liveShift ? (
-              <Button type="button" onClick={startLiveShift} className="gap-2"><Fingerprint className="h-4 w-4" /> Start</Button>
+              <Button type="button" onClick={startLiveShift} className="min-h-12 gap-2 px-6"><Fingerprint className="h-4 w-4" /> Start Clock</Button>
             ) : (
-              <Button type="button" variant="cool" onClick={stopLiveShiftAndFillForm} className="gap-2"><Clock className="h-4 w-4" /> Stop</Button>
+              <Button type="button" variant="cool" onClick={stopLiveShiftAndFillForm} className="min-h-12 gap-2 px-6"><Clock className="h-4 w-4" /> End Job</Button>
             )}
           </div>
         </div>
@@ -2650,7 +2844,7 @@ function PortalMessages({ messages, employees, currentUser, messageForm, setMess
   );
 }
 
-function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOpen, saveProfile, uploadProfilePicture, changePassword }) {
+function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOpen, saveProfile, uploadProfilePicture, changePassword, notificationPermission, requestNotifications, dailyClockReminder, setDailyClockReminder }) {
   const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -2703,6 +2897,13 @@ function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOp
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadProfilePicture(e.target.files?.[0])} />
               </label>
             </Field>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-3xl border border-white/70 bg-white/75 p-4 dark:border-white/10 dark:bg-white/5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-cyan-200 dark:bg-cyan-400/10"><Bell className="h-4 w-4" /></div><div><p className="font-black">Weekday Clock Reminder</p><p className="text-xs font-bold text-slate-500 dark:text-slate-400">7:55 AM Monday–Friday when you have not started work.</p></div></div>
+            {notificationPermission !== "granted" ? <Button type="button" variant="outline" onClick={requestNotifications}>Enable</Button> : <button type="button" role="switch" aria-checked={dailyClockReminder} onClick={() => setDailyClockReminder((value) => !value)} className={cx("relative h-8 w-14 shrink-0 rounded-full transition", dailyClockReminder ? "bg-cyan-500" : "bg-slate-300 dark:bg-slate-700")}><span className={cx("absolute top-1 h-6 w-6 rounded-full bg-white shadow transition", dailyClockReminder ? "left-7" : "left-1")} /></button>}
           </div>
         </div>
 

@@ -332,3 +332,14 @@ input {
   body { background: #fff !important; color: #111827 !important; }
   .no-print { display: none !important; }
 }
+
+/* VODA 1.7 workflow polish */
+html { scroll-behavior: smooth; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+@media (hover: none) {
+  button:active { transform: scale(.985); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+.tabular-nums { font-variant-numeric: tabular-nums; }
