@@ -1166,16 +1166,13 @@ export default function RestorationHoursTracker() {
 
 
   useEffect(() => {
-    const lastOpened = Number(localStorage.getItem("vodaLastOpenedAt") || 0);
-    const nowMs = Date.now();
-    const awayForAWhile = nowMs - lastOpened > 1000 * 60 * 30;
-    if (awayForAWhile) {
-      setShowSplash(true);
-      const splashTimer = window.setTimeout(() => setShowSplash(false), 1500);
-      localStorage.setItem("vodaLastOpenedAt", String(nowMs));
-      return () => window.clearTimeout(splashTimer);
-    }
-    localStorage.setItem("vodaLastOpenedAt", String(nowMs));
+    // Always show the branded launch screen for a short, predictable window.
+    // Previously, showSplash started as true but was only cleared after a 30-minute
+    // absence, which could leave returning users permanently stuck on the splash.
+    setShowSplash(true);
+    localStorage.setItem("vodaLastOpenedAt", String(Date.now()));
+    const splashTimer = window.setTimeout(() => setShowSplash(false), 1500);
+    return () => window.clearTimeout(splashTimer);
   }, []);
 
   useEffect(() => {
