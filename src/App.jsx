@@ -52,8 +52,8 @@ const jobTypes = [
   "Other",
 ];
 
-const brandLogo = "/TUCSON VODA COLORED PNG 1600X1600.png";
-const iconLogo = "/VODA CIRCLE W DOTS PNG.png";
+const brandLogo = "/voda-wordmark.png";
+const iconLogo = "/voda-box-mark.png";
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const employeeRoles = ["admin", "manager", "tech", "employee"];
 const jobStatuses = ["active", "scheduled", "in progress", "on hold", "completed", "closed"];
@@ -586,48 +586,6 @@ function MobileBottomNav({ activeSection, setActiveSection, isAdmin, pendingCoun
   );
 }
 
-function WeekAtGlance({ entries = [], weekDateKeys = [], onOpenDay, onAddHours }) {
-  const today = phoenixDateKey();
-  const total = entries.filter((entry) => !isDeniedEntry(entry)).reduce((sum, entry) => sum + entryHours(entry), 0);
-  const elapsedWorkdays = weekDateKeys.filter((key, index) => index < 5 && key <= today).length || 1;
-  const projected = Math.max(total, (total / elapsedWorkdays) * 5);
-  const overtimeForecast = Math.max(0, projected - 40);
-
-  return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-0">
-        <div className="flex items-end justify-between gap-3 px-4 pb-3 pt-4 sm:px-5 sm:pt-5">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Week at a Glance</p>
-            <h2 className="mt-1 text-xl font-black tracking-[-0.04em]">{total.toFixed(1)} hours this week</h2>
-          </div>
-          <div className={cx("rounded-full px-3 py-1.5 text-[11px] font-black", overtimeForecast > 0 ? "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-200" : "bg-cyan-50 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200")}>
-            {overtimeForecast > 0 ? `~${overtimeForecast.toFixed(1)}h OT forecast` : `~${projected.toFixed(1)}h projected`}
-          </div>
-        </div>
-        <div className="week-glance-strip px-3 pb-4 sm:px-4">
-          {weekDateKeys.map((dateKey, index) => {
-            const dayEntries = entries.filter((entry) => entry.date === dateKey);
-            const activeEntries = dayEntries.filter((entry) => !isDeniedEntry(entry));
-            const hours = activeEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
-            const pending = activeEntries.some(isPendingEntry);
-            const isToday = dateKey === today;
-            const isFuture = dateKey > today;
-            return (
-              <button key={dateKey} type="button" onClick={() => dayEntries.length ? onOpenDay(dateKey, dayEntries) : onAddHours(dateKey)} className={cx("week-glance-day", isToday && "is-today", hours > 0 && "has-hours")}>
-                <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{weekdays[index]}</span>
-                <span className="mt-2 text-lg font-black tabular-nums">{hours > 0 ? `${hours.toFixed(1)}h` : isFuture ? "—" : "0h"}</span>
-                <span className={cx("mt-2 h-1.5 w-1.5 rounded-full", isFuture ? "bg-slate-300/50" : hours === 0 ? "bg-red-400" : pending ? "bg-amber-400" : "bg-emerald-400")} />
-              </button>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-
 function SmartSearch({ entries = [], jobs = [], employees = [], currentUser, onOpenDay, onSelectJob }) {
   const [query, setQuery] = useState("");
   const normalized = query.trim().toLowerCase();
@@ -944,7 +902,7 @@ export default function RestorationHoursTracker() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [appError, setAppError] = useState("");
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("vodaTheme") !== "light");
   const [installPrompt, setInstallPrompt] = useState(null);
   const [notificationPermission, setNotificationPermission] = useState(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
   const [dailyClockReminder, setDailyClockReminder] = useState(() => localStorage.getItem("vodaDailyClockReminder") !== "off");
@@ -955,12 +913,16 @@ export default function RestorationHoursTracker() {
     try { return JSON.parse(localStorage.getItem("vodaLiveShift") || "null"); } catch { return null; }
   });
   const [stoppedShiftReview, setStoppedShiftReview] = useState(null);
-  const [showSplash, setShowSplash] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const [isPhotoUploading, setIsPhotoUploading] = useState(false);
   const swipeStartX = useRef(null);
   const refreshStartY = useRef(null);
   const appOpenedAtRef = useRef(new Date());
   const loginTip = useMemo(() => loginTips[Math.floor(Math.random() * loginTips.length)], []);
+
+  useEffect(() => {
+    localStorage.setItem("vodaTheme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   const [employees, setEmployees] = useState([]);
   const [entries, setEntries] = useState([]);
@@ -2221,11 +2183,11 @@ export default function RestorationHoursTracker() {
     setInviteEmail("");
   }
 
-  if (authLoading) {
+  if (authLoading || showSplash) {
     return (
       <div className="voda-loading-screen">
         <div className="voda-loading-logo-wrap">
-          <img src={brandLogo} alt="Voda Of Tucson" className="voda-loading-logo" />
+          <img src={iconLogo} alt="Voda" className="voda-loading-logo" />
         </div>
       </div>
     );
@@ -2241,7 +2203,7 @@ export default function RestorationHoursTracker() {
             <motion.div initial={{ opacity: 0, y: 10, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }} className="mb-5 flex h-24 w-24 items-center justify-center overflow-hidden rounded-[2rem] bg-slate-50/70 p-4 shadow-2xl shadow-slate-950/10 ring-1 ring-white/80 backdrop-blur-xl">
               <img src={iconLogo} alt="Voda icon" className="h-full w-full object-contain" />
             </motion.div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-600">Voda Of Tucson Portal</p>
+            <img src={brandLogo} alt="Voda Of Tucson" className="h-7 w-auto max-w-[190px] object-contain" /><p className="mt-2 text-[10px] font-black uppercase tracking-[0.24em] text-cyan-700">Employee Portal</p>
             <p className="mt-1 text-sm font-semibold text-slate-500">Secure employee timesheets</p>
           </div>
           <h1 className="text-center text-3xl font-black tracking-[-0.04em] text-slate-950 sm:text-4xl">Welcome back.</h1>
@@ -2282,11 +2244,11 @@ export default function RestorationHoursTracker() {
   }
 
   return (
-    <div className={cx("relative min-h-screen w-full overflow-x-hidden mobile-safe font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition-all duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")} onTouchStart={handleRefreshTouchStart} onTouchEnd={handleRefreshTouchEnd}>
+    <div className={cx("relative min-h-screen w-full overflow-x-hidden mobile-safe font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition-all duration-500 dark:text-white", darkMode ? "dark" : "light", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")} onTouchStart={handleRefreshTouchStart} onTouchEnd={handleRefreshTouchEnd}>
       <MobileBottomNav activeSection={activeSection} setActiveSection={goToSection} isAdmin={currentUser.role === "admin"} pendingCount={pendingCount} />
       <AnimatePresence>{recentlyDeleted && <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="undo-toast no-print"><div className="min-w-0"><p className="text-sm font-black">Hours deleted</p><p className="clean-wrap text-xs font-semibold text-slate-500 dark:text-slate-400">{recentlyDeleted.entry.customerName} · {displayShortDate(recentlyDeleted.entry.date)}</p></div><Button size="sm" variant="outline" onClick={undoDeleteHours}>Undo</Button><button aria-label="Dismiss undo" className="rounded-full p-2 text-slate-400" onClick={() => setRecentlyDeleted(null)}><X className="h-4 w-4" /></button></motion.div>}</AnimatePresence>
       <AnimatePresence>
-        {showSplash && (
+        {false && showSplash && (
           <motion.div
             className="voda-loading-screen fixed inset-0 z-[9999]"
             initial={{ opacity: 1 }}
@@ -2301,7 +2263,7 @@ export default function RestorationHoursTracker() {
               exit={{ opacity: 0, scale: 1.01 }}
               transition={{ opacity: { duration: 0.35 }, scale: { duration: 1.45, repeat: Infinity, ease: "easeInOut" } }}
             >
-              <img src={brandLogo} alt="Voda Of Tucson" className="voda-loading-logo" />
+              <img src={iconLogo} alt="Voda" className="voda-loading-logo" />
             </motion.div>
           </motion.div>
         )}
@@ -2311,12 +2273,13 @@ export default function RestorationHoursTracker() {
       <div className="relative mx-auto w-full max-w-[1540px] overflow-x-hidden px-3 py-3 pb-28 sm:px-4 sm:py-4 sm:pb-28 md:pb-4 lg:px-5 mobile-padding">
         <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex max-w-full flex-col gap-3 overflow-hidden rounded-[1.6rem] border border-white/55 bg-white/74 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-cyan-700/10 ring-1 ring-white/80 sm:h-12 sm:w-12">
-              <img src={iconLogo} alt="Voda icon" className="h-8 w-8 object-contain sm:h-9 sm:w-9" />
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-[1rem] bg-white/90 p-1.5 shadow-lg shadow-cyan-700/10 ring-1 ring-white/80 sm:h-11 sm:w-11 dark:bg-white/95">
+              <img src={iconLogo} alt="Voda icon" className="h-full w-full object-contain" />
             </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-600 dark:text-cyan-300 sm:text-xs">Voda Of Tucson</p>
-              <h1 className="text-xl font-black tracking-[-0.04em] sm:text-2xl md:text-3xl">Hours Tracking</h1>
+            <div className="min-w-0">
+              <img src={brandLogo} alt="Voda Of Tucson" className="mb-1 hidden h-5 w-auto max-w-[150px] object-contain object-left sm:block dark:brightness-0 dark:invert" />
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-700 sm:hidden dark:text-cyan-300">Voda Of Tucson</p>
+              <h1 className="text-[17px] font-black tracking-[-0.035em] sm:text-xl md:text-2xl">Portal</h1>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
@@ -2324,11 +2287,11 @@ export default function RestorationHoursTracker() {
               <AvatarBadge person={currentUser} />
               <div className="min-w-0 break-words leading-tight"><span>{currentUser.name}</span><span className="mx-2 text-slate-300">/</span><span className="capitalize text-cyan-600 dark:text-cyan-300">{currentUser.role}</span></div>
             </div>
-            <Button variant="outline" onClick={() => setSettingsOpen(true)} className="gap-2"><Settings className="h-4 w-4" /> Settings</Button>
+            <Button variant="outline" aria-label="Settings" onClick={() => setSettingsOpen(true)} className="gap-1.5"><Settings className="h-4 w-4" /><span className="hidden sm:inline">Settings</span></Button>
             <Button variant="outline" onClick={() => setDarkMode((value) => !value)} className="gap-2">
-              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />} {darkMode ? "Light" : "Dark"}
+              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}<span className="hidden sm:inline">{darkMode ? "Light" : "Dark"}</span>
             </Button>
-            <Button onClick={handleLogout} className="gap-2"><LogOut className="h-4 w-4" /> Logout</Button>
+            <Button aria-label="Logout" onClick={handleLogout} className="gap-1.5"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">Logout</span></Button>
           </div>
         </motion.header>
 
@@ -2355,7 +2318,6 @@ export default function RestorationHoursTracker() {
         <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
             {(activeSection === "dashboard" || activeSection === "timesheets") && !appLoading && <SmartSearch entries={entries} jobs={activeJobs} employees={employees} currentUser={currentUser} onOpenDay={openDayDetail} onSelectJob={(job) => { setForm((current) => ({ ...current, jobId: job.id, customerName: job.customerName || "", jobType: job.jobType || current.jobType })); goToSection("add"); }} />}
-            {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <WeekAtGlance entries={currentWeekEntries} weekDateKeys={currentWeekDates} onOpenDay={openDayDetail} onAddHours={openQuickAddForDate} />}
             {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <EmployeeTodayPanel
               currentUser={currentUser}
               liveShift={liveShift}
@@ -2385,6 +2347,7 @@ export default function RestorationHoursTracker() {
               <CardContent className="p-0">
                 <div className="relative overflow-hidden rounded-[2.25rem] bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.18),transparent_28%),linear-gradient(135deg,#111827,#1f2937_52%,#0f172a)]">
                   <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(255,255,255,.08),transparent_34%)]" />
+                  <img src={iconLogo} alt="" aria-hidden="true" className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 object-contain opacity-[0.045] brightness-0 invert sm:h-40 sm:w-40" />
 
                   <div className="relative flex flex-col gap-5 border-b border-white/10 px-4 py-5 sm:px-6 sm:py-6 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0">
@@ -2392,8 +2355,8 @@ export default function RestorationHoursTracker() {
                         <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.85)]" />
                         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">Pay period</p>
                       </div>
-                      <h2 className="text-2xl font-black tracking-[-0.06em] text-white sm:text-4xl">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
-                      <p className="mt-2 text-base font-extrabold tracking-[-0.03em] text-slate-300 sm:text-lg">Two-Week Timesheet</p>
+                      <h2 className="text-xl font-black tracking-[-0.045em] text-white sm:text-3xl">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
+                      <p className="mt-1 text-sm font-bold tracking-[-0.02em] text-slate-400 sm:text-base">Two-Week Timesheet</p>
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
 
@@ -2413,7 +2376,7 @@ export default function RestorationHoursTracker() {
                           <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-200">Week {weekIndex + 1}</p>
                           <p className="text-xs font-extrabold text-slate-300">{displayShortDate(datesForWeek[0])} – {displayShortDate(datesForWeek[6])}</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+                        <div className="pay-period-week-grid grid grid-cols-7 gap-1.5 sm:gap-2">
                       {datesForWeek.map((date, index) => {
                         const dateKey = formatDate(date);
                         const dayEntries = visibleEntries.filter((entry) => entry.date === dateKey);
@@ -2432,67 +2395,34 @@ export default function RestorationHoursTracker() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.03, ...spring }}
                             className={cx(
-                              "group relative min-h-[224px] w-full overflow-hidden rounded-[1.35rem] border p-3 pt-10 text-center shadow-xl backdrop-blur-2xl transition-all duration-500 ease-out will-change-transform sm:min-h-[242px]",
+                              "pay-period-day group relative min-h-[112px] w-full overflow-hidden rounded-[1rem] border px-1.5 py-2 text-center shadow-lg backdrop-blur-xl transition-all duration-300 ease-out sm:min-h-[138px] sm:px-2 sm:py-2.5",
                               "border-white/15 bg-white/[0.075] hover:-translate-y-0.5 hover:bg-white/[0.105] hover:shadow-2xl hover:shadow-cyan-950/20",
                               isToday && "border-cyan-400/90 ring-2 ring-cyan-400/60"
                             )}
                           >
                             {isToday && (
-                              <span className="absolute left-3 top-3 z-10 inline-flex h-6 min-w-[58px] items-center justify-center rounded-full border border-cyan-200/70 bg-cyan-400 px-3 text-[9px] font-black uppercase leading-none tracking-[0.08em] text-slate-950 shadow-lg shadow-cyan-500/25 sm:h-7 sm:min-w-[64px] sm:text-[10px]">
-                                Today
+                              <span className="absolute right-1.5 top-1.5 z-10 h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,.9)] sm:right-2 sm:top-2 sm:h-2 sm:w-2">
+                                <span className="sr-only">Today</span>
                               </span>
                             )}
 
-                            <div className="flex min-h-[58px] flex-col items-start justify-start gap-1 text-left">
-                              <p className="text-[13px] font-black leading-none tracking-[-0.025em] text-white sm:text-[14px]">{shortDay}</p>
-                              <p className="max-w-full text-[10px] font-extrabold leading-tight text-slate-400 sm:text-[10.5px]">{displayDate(date)}</p>
+                            <div className="flex min-h-[34px] flex-col items-center justify-start gap-0.5 text-center sm:min-h-[42px]">
+                              <p className="text-[10px] font-black uppercase leading-none tracking-[0.04em] text-white sm:text-xs">{shortDay}</p>
+                              <p className="date-compact max-w-full text-[8px] font-bold leading-tight text-slate-400 sm:text-[9px]">{displayShortDate(date)}</p>
                             </div>
 
-                            <div className="my-3 h-px w-full bg-white/12" />
+                            <div className="my-1.5 h-px w-full bg-white/10 sm:my-2" />
 
-                            <div className="flex h-[62px] flex-col items-center justify-center sm:h-[68px]">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-slate-950/25 shadow-inner shadow-slate-950/30 sm:h-10 sm:w-10">
-                                <Clock className="h-4 w-4 text-cyan-300" />
-                              </div>
-                              <p className="mt-2 text-[22px] font-black leading-none tracking-[-0.055em] text-cyan-300 sm:text-[24px]">{total.toFixed(1)}h</p>
-                              <p className="mt-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">Logged</p>
+                            <div className="flex h-[34px] items-center justify-center sm:h-[42px]">
+                              <p className="text-[15px] font-black leading-none tracking-[-0.04em] text-cyan-300 sm:text-lg">{total.toFixed(1)}h</p>
                             </div>
 
-                            <div className="mt-2 min-h-[60px]">
-                              {dayEntries.length === 0 ? (
-                                <div className="flex min-h-[60px] flex-col items-center justify-center rounded-[1.1rem] border border-dashed border-white/18 bg-white/[0.035] px-2 text-slate-400">
-                                  <BriefcaseBusiness className="mb-1.5 h-4 w-4 opacity-75" />
-                                  <p className="text-[10px] font-extrabold leading-tight">No entries</p>
-                                </div>
-                              ) : (
-                                <div className="space-y-1.5 text-left">
-                                  {dayEntries.slice(0, 2).map((entry) => (
-                                    <div
-                                      key={entry.id}
-                                      className={cx(
-                                        "rounded-[1rem] border border-white/12 bg-slate-950/20 px-2.5 py-2 shadow-sm",
-                                        isDeniedEntry(entry) && "border-red-300/20 bg-red-500/15 opacity-80"
-                                      )}
-                                    >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                          <p className={cx("line-clamp-2 job-text text-[10.5px] font-black leading-snug tracking-[-0.02em] text-white", isDeniedEntry(entry) && "text-red-100")}>{entry.customerName}</p>
-                                          <p className="mt-0.5 job-text text-[9.5px] font-bold leading-snug text-slate-400">{entry.start}–{entry.end}</p>
-                                        </div>
-                                        <span className={cx("shrink-0 rounded-full bg-cyan-400/12 px-1.5 py-0.5 text-[9px] font-black text-cyan-200", isDeniedEntry(entry) && "bg-red-400/15 text-red-100")}>{isDeniedEntry(entry) ? "Denied" : `${entryHours(entry).toFixed(2)}h`}</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                            <div className="mt-1 flex min-h-[20px] items-center justify-center gap-1 sm:mt-2">
+                              {dayEntries.length === 0 ? <span className="text-[8px] font-bold text-slate-500 sm:text-[9px]">Empty</span> : <>
+                                <span className={cx("h-1.5 w-1.5 rounded-full", deniedCount ? "bg-red-300" : activeEntries.some(isPendingEntry) ? "bg-amber-300" : "bg-emerald-300")} />
+                                <span className="text-[8px] font-black text-slate-400 sm:text-[9px]">{dayEntries.length}</span>
+                              </>}
                             </div>
-
-                            {(dayEntries.length > 2 || deniedCount > 0) && (
-                              <div className="mt-2 flex min-h-[22px] flex-wrap items-center justify-center gap-1 text-[9px] font-black">
-                                {dayEntries.length > 2 && <span className="rounded-full bg-white/8 px-2 py-0.5 text-slate-300">+{dayEntries.length - 2} more</span>}
-                                {deniedCount > 0 && <span className="rounded-full bg-red-400/18 px-2 py-0.5 text-red-100">{deniedCount} denied logged</span>}
-                              </div>
-                            )}
                           </motion.button>
                         );
                       })}
@@ -2500,15 +2430,7 @@ export default function RestorationHoursTracker() {
                       </div>
                     ))}
 
-                    <div className="mt-5 flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-white/[0.06] px-5 py-4 text-slate-300">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-300/30 text-cyan-300">i</span>
-                        <p className="text-sm font-bold sm:text-base">Click any day to view details. The export keeps Week 1 and Week 2 separated on one worksheet.</p>
-                      </div>
-                      <ChevronRight className="hidden h-5 w-5 text-slate-400 sm:block" />
-                    </div>
-
-                    <div className="mt-4 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/[0.08] p-4 text-white">
+                    <div className="mt-3 rounded-[1.15rem] border border-cyan-300/15 bg-cyan-300/[0.06] p-3 text-white sm:p-4">
                       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                           <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">Payroll Summary</p>
@@ -2516,7 +2438,7 @@ export default function RestorationHoursTracker() {
                         </div>
                         <p className="text-xs font-bold text-slate-300">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6 sm:gap-2">
                         <MiniStat label="Week 1" value={`${weekOneSummary.totalHours.toFixed(2)}h`} tone="cyan" />
                         <MiniStat label="Week 2" value={`${weekTwoSummary.totalHours.toFixed(2)}h`} tone="cyan" />
                         <MiniStat label="Period" value={`${payPeriodSummary.totalHours.toFixed(2)}h`} tone="emerald" />

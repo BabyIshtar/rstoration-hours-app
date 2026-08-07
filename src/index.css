@@ -773,3 +773,75 @@ button, [role="button"] { touch-action:manipulation; }
   .card, .ios-glass, .glass-card, .panel, .dashboard-card, .smart-search-results, .floating-live-timer { backdrop-filter:none !important; background-color:rgba(248,250,252,.98); }
   .dark .card, .dark .ios-glass, .dark .glass-card, .dark .panel, .dark .dashboard-card, .dark .smart-search-results, .dark .floating-live-timer { background-color:rgba(15,23,42,.98) !important; }
 }
+
+/* Voda Time — minimalist branding + mobile calendar pass */
+.light {
+  color-scheme: light;
+  color: #172238;
+}
+.light .card,
+.light .ios-glass,
+.light .glass-card,
+.light .panel,
+.light .dashboard-card,
+.light header,
+.light .native-bottom-nav-inner,
+.light .mobile-more-sheet {
+  background: rgba(255,255,255,.88) !important;
+  border-color: rgba(23,34,56,.09) !important;
+  box-shadow: 0 14px 42px rgba(23,34,56,.09) !important;
+  color: #172238 !important;
+}
+.light :where(.card,.ios-glass,.glass-card,.panel,.dashboard-card,header) :where(.text-slate-950,.text-slate-900,.text-slate-800) { color:#172238 !important; }
+.light :where(.card,.ios-glass,.glass-card,.panel,.dashboard-card,header) :where(.text-slate-700,.text-slate-600) { color:#334155 !important; }
+.light :where(.card,.ios-glass,.glass-card,.panel,.dashboard-card,header) :where(.text-slate-500,.text-slate-400) { color:#64748b !important; }
+.light input,
+.light select,
+.light textarea,
+.light .input {
+  background: rgba(255,255,255,.96) !important;
+  border-color: rgba(51,65,85,.16) !important;
+  color: #172238 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 7px 22px rgba(15,23,42,.055) !important;
+}
+.light input::placeholder,
+.light textarea::placeholder { color:#94a3b8 !important; }
+.light .native-bottom-nav { color:#334155; }
+.light .native-bottom-nav-item { color:#64748b; }
+.light .native-bottom-nav-item.is-active { color:#0891b2; }
+
+.voda-loading-screen { background: #f7f5f0; }
+.voda-loading-logo-wrap {
+  width: min(34vw, 138px);
+  animation: voda-logo-pulse 1.5s cubic-bezier(.22,1,.36,1) both;
+}
+.voda-loading-logo { filter: drop-shadow(0 12px 28px rgba(15,23,42,.08)); }
+@keyframes voda-logo-pulse {
+  0% { opacity: .3; transform: scale(.955); }
+  42% { opacity: 1; transform: scale(1); }
+  72% { opacity: .88; transform: scale(.992); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.pay-period-week-grid { width:100%; min-width:0; }
+.pay-period-day { min-width:0; }
+.date-compact { white-space:nowrap; overflow:hidden; text-overflow:clip; }
+
+@media (max-width: 640px) {
+  .pay-period-week-grid { gap: 5px !important; }
+  .pay-period-day {
+    min-height: 104px !important;
+    border-radius: 14px !important;
+    padding: 8px 3px !important;
+    box-shadow: 0 8px 24px rgba(2,6,23,.16) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(112%) !important;
+    backdrop-filter: blur(8px) saturate(112%) !important;
+  }
+  .pay-period-day:hover { transform:none !important; }
+  .date-compact { font-size:7.5px !important; letter-spacing:-.02em; }
+  header { border-radius: 1.25rem !important; }
+  header > div:last-child { gap:6px !important; }
+  header button { min-height:44px; font-size:11px !important; padding-left:10px !important; padding-right:10px !important; }
+  .bubble-fit { font-size:10px; }
+  .native-bottom-nav-item span:last-child { white-space:nowrap; font-size:9px; letter-spacing:-.01em; }
+}
