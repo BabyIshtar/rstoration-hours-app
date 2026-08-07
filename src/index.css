@@ -623,3 +623,153 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 }
 .dark .mobile-more-sheet { background: rgba(15,23,42,.96); border-color: rgba(255,255,255,.1); }
 .mobile-more-handle { width: 42px; height: 5px; margin: 0 auto 10px; border-radius:999px; background: rgba(100,116,139,.3); }
+
+/* Voda Time minimalist completion pass */
+:root {
+  --voda-glass: rgba(255, 255, 255, .72);
+  --voda-glass-strong: rgba(255, 255, 255, .84);
+  --voda-border: rgba(255, 255, 255, .7);
+  --voda-shadow: 0 16px 48px rgba(15, 23, 42, .075);
+}
+
+.voda-loading-screen {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f7f5f0;
+}
+.voda-loading-logo-wrap {
+  width: min(52vw, 220px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: voda-logo-pulse 1.45s ease-in-out infinite;
+}
+.voda-loading-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+@keyframes voda-logo-pulse {
+  0%, 100% { opacity: .78; transform: scale(.985); }
+  50% { opacity: 1; transform: scale(1.015); }
+}
+
+/* Glass without expensive full-screen blur stacking */
+.card,
+.ios-glass,
+.glass-card,
+.panel,
+.dashboard-card,
+.native-sheet > div,
+header {
+  background-color: var(--voda-glass) !important;
+  border-color: var(--voda-border) !important;
+  box-shadow: var(--voda-shadow) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(125%);
+  backdrop-filter: blur(16px) saturate(125%);
+}
+
+/* Text must wrap naturally; never split normal labels mid-word. */
+:where(.card, .ios-glass, .glass-card, .panel, .dashboard-card, header, .native-sheet) :where(p, span, label, button, a, h1, h2, h3, h4) {
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  hyphens: none !important;
+}
+.bubble-fit {
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: break-word !important;
+  word-break: normal !important;
+}
+
+/* Keep controls readable and appropriately sized on phones. */
+@media (max-width: 640px) {
+  .card,
+  .ios-glass,
+  .glass-card,
+  .panel,
+  .dashboard-card,
+  .native-sheet > div,
+  header {
+    -webkit-backdrop-filter: blur(10px) saturate(115%);
+    backdrop-filter: blur(10px) saturate(115%);
+  }
+  button { max-width: 100%; }
+  button:not([aria-label]) { line-height: 1.15; }
+  .input { width: 100%; min-width: 0; }
+  .week-glance-strip { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .week-glance-strip::-webkit-scrollbar { display: none; }
+  .week-glance-day { min-width: 74px; }
+  [class*="tracking-[0.2"], [class*="tracking-[0.24"], [class*="tracking-[0.28"] { letter-spacing: .12em !important; }
+}
+
+.dark .card,
+.dark .ios-glass,
+.dark .glass-card,
+.dark .panel,
+.dark .dashboard-card,
+.dark .native-sheet > div,
+.dark header {
+  background-color: rgba(13, 22, 34, .82) !important;
+  border-color: rgba(255,255,255,.11) !important;
+}
+
+
+/* VODA Time — full native polish pass */
+:root {
+  --voda-glass: rgba(255,255,255,.66);
+  --voda-glass-border: rgba(255,255,255,.76);
+  --voda-shadow: 0 18px 48px rgba(15,23,42,.09);
+}
+
+.smart-search-wrap { position: relative; z-index: 30; }
+.smart-search-input { min-height: 54px; border-radius: 1.35rem !important; background: rgba(255,255,255,.72) !important; backdrop-filter: blur(16px) saturate(135%); box-shadow: var(--voda-shadow); }
+.smart-search-results { position:absolute; left:0; right:0; top:calc(100% + 8px); overflow:hidden; border:1px solid rgba(255,255,255,.82); border-radius:1.35rem; background:rgba(248,250,252,.95); box-shadow:0 24px 72px rgba(15,23,42,.18); backdrop-filter:blur(22px) saturate(150%); }
+.dark .smart-search-results { border-color:rgba(255,255,255,.1); background:rgba(10,16,27,.96); }
+.smart-search-result { width:100%; min-height:62px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border-bottom:1px solid rgba(148,163,184,.14); text-align:left; }
+.smart-search-result:last-child { border-bottom:0; }
+.smart-search-result:hover { background:rgba(6,182,212,.06); }
+
+.floating-live-timer { position:fixed; z-index:46; left:50%; bottom:calc(82px + env(safe-area-inset-bottom)); transform:translateX(-50%); width:min(92vw,420px); min-height:62px; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:12px; border:1px solid rgba(255,255,255,.78); border-radius:1.55rem; padding:9px 10px 9px 14px; background:rgba(15,23,42,.91); color:white; box-shadow:0 24px 70px rgba(15,23,42,.34), inset 0 1px 0 rgba(255,255,255,.12); backdrop-filter:blur(18px) saturate(145%); }
+.floating-live-timer small { display:block; font-size:9px; font-weight:900; letter-spacing:.15em; text-transform:uppercase; color:#a5f3fc; }
+.floating-live-timer b { display:block; margin-top:2px; font-size:18px; font-variant-numeric:tabular-nums; }
+.floating-live-dot { width:10px; height:10px; border-radius:999px; background:#22d3ee; box-shadow:0 0 0 5px rgba(34,211,238,.12),0 0 18px rgba(34,211,238,.7); animation:vodaLivePulse 1.8s ease-in-out infinite; }
+.floating-live-stop { border-radius:1rem; background:rgba(255,255,255,.12); padding:10px 12px; font-size:11px; font-weight:900; white-space:nowrap; }
+@keyframes vodaLivePulse { 50% { transform:scale(.82); opacity:.65; } }
+
+.daily-timeline { position:relative; }
+.daily-timeline-row { position:relative; width:100%; min-height:70px; display:grid; grid-template-columns:58px 14px minmax(0,1fr); gap:12px; align-items:start; padding:8px 4px; color:inherit; }
+.daily-timeline-time { text-align:right; padding-top:1px; }
+.daily-timeline-time b { display:block; font-size:12px; font-variant-numeric:tabular-nums; }
+.daily-timeline-time small { display:block; margin-top:3px; font-size:10px; color:#94a3b8; }
+.daily-timeline-node { z-index:2; width:10px; height:10px; margin-top:3px; border:2px solid white; border-radius:999px; background:#0891b2; box-shadow:0 0 0 2px rgba(8,145,178,.14); }
+.daily-timeline-node.is-live { background:#22d3ee; box-shadow:0 0 0 4px rgba(34,211,238,.14),0 0 16px rgba(34,211,238,.35); }
+.daily-timeline-line { position:absolute; left:75px; top:22px; bottom:-11px; width:1px; background:linear-gradient(#cbd5e1,rgba(203,213,225,.22)); }
+.dark .daily-timeline-line { background:linear-gradient(rgba(148,163,184,.38),rgba(148,163,184,.08)); }
+
+.one-tap-clock { box-shadow:0 14px 32px rgba(8,145,178,.28) !important; }
+
+/* Apple-like hierarchy and accessible field use */
+button, [role="button"] { touch-action:manipulation; }
+.native-bottom-nav-item, .mobile-more-sheet button, .admin-entry-actions button { min-height:48px; }
+.card, .ios-glass, .glass-card, .panel, .dashboard-card { border-color:rgba(255,255,255,.72); box-shadow:0 18px 54px rgba(15,23,42,.075), inset 0 1px 0 rgba(255,255,255,.72); }
+.dark .card, .dark .ios-glass, .dark .glass-card, .dark .panel, .dark .dashboard-card { box-shadow:0 20px 62px rgba(0,0,0,.27), inset 0 1px 0 rgba(255,255,255,.045) !important; }
+
+@media (min-width: 769px) { .floating-live-timer { bottom:24px; } }
+@media (max-width: 640px) {
+  .smart-search-input { min-height:52px; }
+  .floating-live-timer { width:calc(100vw - 24px); }
+  .daily-timeline-row { grid-template-columns:52px 12px minmax(0,1fr); gap:10px; }
+  .daily-timeline-line { left:67px; }
+  .card, .ios-glass, .glass-card, .panel, .dashboard-card { backdrop-filter: blur(11px) saturate(128%); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .card, .ios-glass, .glass-card, .panel, .dashboard-card, .smart-search-results, .floating-live-timer { backdrop-filter:none !important; background-color:rgba(248,250,252,.98); }
+  .dark .card, .dark .ios-glass, .dark .glass-card, .dark .panel, .dark .dashboard-card, .dark .smart-search-results, .dark .floating-live-timer { background-color:rgba(15,23,42,.98) !important; }
+}

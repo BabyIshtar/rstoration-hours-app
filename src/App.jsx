@@ -516,6 +516,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
 
 function MobileBottomNav({ activeSection, setActiveSection, isAdmin, pendingCount = 0 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => { setMoreOpen(false); }, [activeSection]);
   const items = [
     { id: "dashboard", label: "Home", icon: <Activity /> },
     { id: "timesheets", label: "Time", icon: <CalendarDays /> },
@@ -626,54 +627,41 @@ function WeekAtGlance({ entries = [], weekDateKeys = [], onOpenDay, onAddHours }
   );
 }
 
-function TimeHealthCard({ missingDays = [], currentWeekHours = 0, liveShift, onAddHours, onStopShift }) {
-  const today = phoenixDateKey();
-  const workdayNumber = Math.max(1, Math.min(5, phoenixDateKeyToDate(today).getUTCDay() || 7));
-  const projected = Math.max(currentWeekHours, (currentWeekHours / workdayNumber) * 5);
-  const overtimeForecast = Math.max(0, projected - 40);
 
+function SmartSearch({ entries = [], jobs = [], employees = [], currentUser, onOpenDay, onSelectJob }) {
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLowerCase();
+  const results = useMemo(() => {
+    if (normalized.length < 2) return [];
+    const entryResults = entries.filter((entry) => {
+      if (currentUser?.role !== "admin" && entry.employeeId !== currentUser?.id) return false;
+      const employeeName = employees.find((person) => person.id === entry.employeeId)?.name || "";
+      return [entry.customerName, entry.jobType, entry.notes, entry.date, employeeName].some((value) => String(value || "").toLowerCase().includes(normalized));
+    }).slice(0, 5).map((entry) => ({ type: "entry", id: entry.id, title: entry.customerName || "Time entry", subtitle: `${displayShortDate(entry.date)} · ${entry.start}–${entry.end} · ${entryHours(entry).toFixed(2)}h`, entry }));
+    const jobResults = jobs.filter((job) => [job.customerName, job.jobNumber, job.address, job.claimNumber].some((value) => String(value || "").toLowerCase().includes(normalized))).slice(0, 4).map((job) => ({ type: "job", id: `job-${job.id}`, title: job.customerName, subtitle: [job.jobNumber, job.address].filter(Boolean).join(" · ") || job.jobType || "Job", job }));
+    return [...entryResults, ...jobResults].slice(0, 7);
+  }, [normalized, entries, jobs, employees, currentUser]);
   return (
-    <Card>
-      <CardContent>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Time Health</p><h2 className="text-lg font-black tracking-[-0.03em]">Payroll checkup</h2></div>
-          <Clock className="h-6 w-6 text-cyan-700 dark:text-cyan-300" />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-[1.35rem] border border-white/70 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">40-hour forecast</p>
-            <p className="mt-1 text-2xl font-black tabular-nums">{projected.toFixed(1)}h</p>
-            <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{overtimeForecast > 0 ? `${overtimeForecast.toFixed(1)} projected overtime hours` : `${Math.max(0, 40 - projected).toFixed(1)}h below overtime pace`}</p>
-          </div>
-          <div className="rounded-[1.35rem] border border-white/70 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Missing weekdays</p>
-            <p className="mt-1 text-2xl font-black tabular-nums">{missingDays.length}</p>
-            <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{missingDays.length ? missingDays.map((key) => displayShortDate(key)).join(" · ") : "All elapsed weekdays have time entered."}</p>
-          </div>
-        </div>
-        {missingDays.length > 0 && !liveShift && <Button variant="outline" className="mt-3 w-full" onClick={() => onAddHours(missingDays[0])}><Plus className="h-4 w-4" /> Add missing hours</Button>}
-        {liveShift && <ShiftHealthBanner liveShift={liveShift} onStopShift={onStopShift} />}
-      </CardContent>
-    </Card>
+    <div className="smart-search-wrap">
+      <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><input className="input smart-search-input pl-11" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search jobs, dates, notes, employees…" aria-label="Search Voda Time"/></div>
+      <AnimatePresence>{normalized.length >= 2 && <motion.div initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} className="smart-search-results">
+        {results.length ? results.map((result) => <button key={result.id} type="button" className="smart-search-result" onClick={() => { triggerNativeFeedback("light"); setQuery(""); if (result.type === "entry") onOpenDay(result.entry.date, entries.filter((entry) => entry.date === result.entry.date)); else onSelectJob?.(result.job); }}><span className="min-w-0"><b className="clean-wrap block text-sm">{result.title}</b><small className="clean-wrap mt-1 block text-xs text-slate-500 dark:text-slate-400">{result.subtitle}</small></span><ChevronRight className="h-4 w-4 shrink-0 text-slate-400"/></button>) : <div className="p-4 text-sm font-bold text-slate-400">No matching time or jobs.</div>}
+      </motion.div>}</AnimatePresence>
+    </div>
   );
 }
 
-function ShiftHealthBanner({ liveShift, onStopShift }) {
-  const [tick, setTick] = useState(Date.now());
-  useEffect(() => {
-    if (!liveShift?.startedAt) return undefined;
-    const timer = window.setInterval(() => setTick(Date.now()), 60 * 1000);
-    return () => window.clearInterval(timer);
-  }, [liveShift?.startedAt]);
-  if (!liveShift?.startedAt) return null;
-  const elapsedHours = Math.max(0, (tick - new Date(liveShift.startedAt).getTime()) / 3600000);
-  if (elapsedHours < 10) return null;
-  return (
-    <div className={cx("mt-3 flex flex-col gap-3 rounded-[1.35rem] border p-4 sm:flex-row sm:items-center sm:justify-between", elapsedHours >= 12 ? "border-red-200 bg-red-50 dark:border-red-300/15 dark:bg-red-500/10" : "border-amber-200 bg-amber-50 dark:border-amber-300/15 dark:bg-amber-400/10")}>
-      <div><p className="text-sm font-black">Clock has been running {elapsedHours.toFixed(1)} hours</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">Double-check that you didn’t forget to clock out.</p></div>
-      <Button size="sm" variant={elapsedHours >= 12 ? "danger" : "outline"} onClick={onStopShift}>Stop & review</Button>
-    </div>
-  );
+function FloatingLiveTimer({ liveShift, onStop }) {
+  if (!liveShift) return null;
+  return <motion.button initial={{opacity:0,y:18,scale:.96}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:18,scale:.96}} type="button" onClick={() => { triggerNativeFeedback("success"); onStop(); }} className="floating-live-timer no-print" aria-label="Clock out and review shift"><span className="floating-live-dot"/><span className="min-w-0 text-left"><small>Clocked in</small><b><LiveElapsed startedAt={liveShift.startedAt}/></b></span><span className="floating-live-stop">Clock Out</span></motion.button>;
+}
+
+function DailyTimeline({ entries = [], liveShift, dateKey = phoenixDateKey(), onOpenEntry }) {
+  const source = sortEntriesByDateTime(entries.filter((entry) => entry.date === dateKey));
+  const timeline = [...source.map((entry) => ({ id: entry.id, time: entry.start, end: entry.end, title: entry.customerName || "Job", detail: `${entryHours(entry).toFixed(2)}h · ${entryApprovalStatus(entry)}`, entry }))];
+  if (liveShift && liveShift.date === dateKey) timeline.push({ id: "live", time: formatPhoenixTime(new Date(liveShift.startedAt)), end: "Now", title: liveShift.customerName || "Current shift", detail: "Clocked in · running", live: true });
+  timeline.sort((a,b) => String(a.time).localeCompare(String(b.time)));
+  return <Card><CardContent><div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300">Today</p><h2 className="text-lg font-black tracking-[-0.035em]">Daily timeline</h2></div><Clock className="h-5 w-5 text-cyan-700 dark:text-cyan-300"/></div>{timeline.length ? <div className="daily-timeline">{timeline.map((item,index)=><button type="button" disabled={!item.entry} onClick={() => item.entry && onOpenEntry?.(item.entry)} key={item.id} className="daily-timeline-row"><div className="daily-timeline-time"><b>{item.time}</b><small>{item.end}</small></div><span className={cx("daily-timeline-node", item.live && "is-live")}/><div className="min-w-0 text-left"><b className="clean-wrap block text-sm">{item.title}</b><small className="clean-wrap mt-1 block text-xs text-slate-500 dark:text-slate-400">{item.detail}</small></div>{index < timeline.length-1 && <span className="daily-timeline-line"/>}</button>)}</div> : <div className="rounded-[1.35rem] border border-dashed border-slate-200/80 bg-white/45 p-5 text-center dark:border-white/10 dark:bg-white/5"><Clock className="mx-auto h-5 w-5 text-slate-300"/><p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-400">No hours logged today yet.</p></div>}</CardContent></Card>;
 }
 
 function EmployeeActivityTimeline({ events = [], currentUser, employeeById }) {
@@ -1036,6 +1024,21 @@ export default function RestorationHoursTracker() {
   const historyCalendarDays = useMemo(() => getCalendarGridDates(historyMonth), [historyMonth]);
 
   useEffect(() => {
+    if (!liveShift?.startedAt || !currentUser?.id) return undefined;
+    const checkLongShift = () => {
+      const elapsedHours = (Date.now() - new Date(liveShift.startedAt).getTime()) / 36e5;
+      const warningKey = `vodaLongShiftWarning:${currentUser.id}:${liveShift.startedAt}`;
+      if (elapsedHours >= 11 && localStorage.getItem(warningKey) !== "yes") {
+        localStorage.setItem(warningKey, "yes");
+        notifyUser("Still clocked in", `Your VODA clock has been running for ${Math.floor(elapsedHours)} hours. If your shift ended, open the timer and clock out.`);
+      }
+    };
+    checkLongShift();
+    const timer = window.setInterval(checkLongShift, 15 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [liveShift?.startedAt, currentUser?.id]);
+
+  useEffect(() => {
     let isMounted = true;
 
     async function initAuth() {
@@ -1370,7 +1373,6 @@ export default function RestorationHoursTracker() {
   const currentWeekDates = Array.from({ length: 7 }, (_, index) => formatDate(addDays(phoenixDateKeyToDate(currentWeekStart), index)));
   const currentWeekEntries = personalEntries.filter((entry) => currentWeekDates.includes(entry.date));
   const currentWeekHours = currentWeekEntries.filter((entry) => !isDeniedEntry(entry)).reduce((sum, entry) => sum + entryHours(entry), 0);
-  const missingWeekdays = currentWeekDates.slice(0, 5).filter((dateKey) => dateKey <= todayKey && !currentWeekEntries.some((entry) => entry.date === dateKey && !isDeniedEntry(entry)));
   const recentJobNames = [...new Set(sortEntriesByDateTime(personalEntries).reverse().map((entry) => entry.customerName).filter(Boolean))];
 
   const employeeSummaries = useMemo(() => {
@@ -1402,16 +1404,6 @@ export default function RestorationHoursTracker() {
   const historyTotal = historyEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
   const historyApprovedTotal = historyEntries.filter((entry) => entry.approvalStatus === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
   const selectedHistoryEmployeeName = selectedEmployeeId === "all" ? "All employees" : employeeById.get(selectedEmployeeId)?.name || "Selected employee";
-
-  function applyJobSelection(jobId, updater = setForm) {
-    const selectedJob = jobs.find((job) => job.id === jobId);
-    updater((current) => ({
-      ...current,
-      jobId,
-      jobType: selectedJob?.jobType || current.jobType,
-      customerName: selectedJob?.customerName || current.customerName,
-    }));
-  }
 
   async function saveProfile() {
     if (!currentUser) return;
@@ -1721,7 +1713,7 @@ export default function RestorationHoursTracker() {
       setOfflineQueue((current) => [...current, payload]);
       setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
       localStorage.removeItem(`vodaEntryDraft:${currentUser.id}`);
-      setActiveSection("timesheets");
+      goToSection("timesheets");
       setAppError("You are offline, so this entry was saved locally and will sync when the connection returns.");
       return;
     }
@@ -1732,7 +1724,7 @@ export default function RestorationHoursTracker() {
     notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
     setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
     localStorage.removeItem(`vodaEntryDraft:${currentUser.id}`);
-    setActiveSection("timesheets");
+    goToSection("timesheets");
     await loadAppData();
   }
 
@@ -1777,7 +1769,7 @@ export default function RestorationHoursTracker() {
         photoUrl: "",
         employeeSignature: "",
       });
-      setActiveSection("timesheets");
+      goToSection("timesheets");
       if (startAnother) setNextJobOpen(true);
       setAppError("You are offline, so this recorded shift was saved locally and will sync when the connection returns.");
       return;
@@ -1796,7 +1788,7 @@ export default function RestorationHoursTracker() {
       photoUrl: "",
       employeeSignature: "",
     });
-    setActiveSection("timesheets");
+    goToSection("timesheets");
     if (startAnother) setNextJobOpen(true);
     await loadAppData();
   }
@@ -1806,6 +1798,8 @@ export default function RestorationHoursTracker() {
     setReviewModal(null);
     setEditModal(null);
     setDayDetail(null);
+    setSettingsOpen(false);
+    setNextJobOpen(false);
   }
 
   function goToSection(section) {
@@ -1997,6 +1991,22 @@ export default function RestorationHoursTracker() {
     closeTransientPanels();
     setActiveSection(currentUser?.role === "admin" ? "review" : "timesheets");
     await loadAppData();
+  }
+
+  async function duplicateHoursEntry(entry) {
+    if (!entry?.id) return;
+    setAppError("");
+    const copy = { ...entry, id: undefined, approvalStatus: "pending", status: "pending", denialReason: "", reviewedAt: null };
+    const payload = entryToInsertPayload(copy);
+    const { data, error } = await supabase.from("time_entries").insert(payload).select("*").single();
+    if (error) return setAppError(error.message);
+    const duplicated = normalizeEntry(data);
+    setEntries((current) => [duplicated, ...current]);
+    await recordAudit({ action: "duplicate", label: "Hours duplicated", detail: `${entry.customerName} · ${displayDate(entry.date)} · ${entryHours(entry).toFixed(2)}h`, entry: duplicated });
+    triggerNativeFeedback("success");
+    notifyUser("Hours duplicated", "A pending copy was created. Edit it if the date or time needs to change.");
+    if (currentUser?.role === "admin") openEditModal(duplicated);
+    else openDayDetail(duplicated.date, [duplicated, ...entries.filter((item) => item.date === duplicated.date)]);
   }
 
   async function deleteHoursEntry(entry) {
@@ -2213,11 +2223,10 @@ export default function RestorationHoursTracker() {
 
   if (authLoading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-slate-950 px-4 text-white">
-        <div className="flex h-28 w-28 items-center justify-center rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
-          <img src={iconLogo} alt="VODA Logo" className="h-full w-full object-contain" />
+      <div className="voda-loading-screen">
+        <div className="voda-loading-logo-wrap">
+          <img src={brandLogo} alt="Voda Of Tucson" className="voda-loading-logo" />
         </div>
-        <div className="flex flex-col items-center"><div className="mb-3 h-2 w-2 animate-pulse rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.9)]" /><p className="text-sm font-black uppercase tracking-[0.25em] text-cyan-300">Loading Portal</p></div>
       </div>
     );
   }
@@ -2279,23 +2288,20 @@ export default function RestorationHoursTracker() {
       <AnimatePresence>
         {showSplash && (
           <motion.div
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-[radial-gradient(circle_at_50%_10%,rgba(103,232,249,.18),transparent_30%),linear-gradient(180deg,#020617,#0f172a)] px-6"
+            className="voda-loading-screen fixed inset-0 z-[9999]"
             initial={{ opacity: 1 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
             <motion.div
-              className="flex flex-col items-center gap-5"
-              initial={{ opacity: 0, y: 14, scale: 0.92, filter: "blur(10px)" }}
-              animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -10, scale: 1.04, filter: "blur(8px)" }}
-              transition={{ duration: 1.12, ease: [0.22, 1, 0.36, 1] }}
+              className="voda-loading-logo-wrap"
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: [0.985, 1.015, 0.985] }}
+              exit={{ opacity: 0, scale: 1.01 }}
+              transition={{ opacity: { duration: 0.35 }, scale: { duration: 1.45, repeat: Infinity, ease: "easeInOut" } }}
             >
-              <img src={brandLogo} alt="Voda Of Tucson" className="h-28 w-auto object-contain brightness-0 invert drop-shadow-[0_0_30px_rgba(103,232,249,.22)] sm:h-36" />
-              <div className="h-1 w-28 overflow-hidden rounded-full bg-white/10">
-                <motion.div className="h-full rounded-full bg-cyan-300" initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 1.25, ease: "easeOut" }} />
-              </div>
+              <img src={brandLogo} alt="Voda Of Tucson" className="voda-loading-logo" />
             </motion.div>
           </motion.div>
         )}
@@ -2348,9 +2354,8 @@ export default function RestorationHoursTracker() {
 
         <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
+            {(activeSection === "dashboard" || activeSection === "timesheets") && !appLoading && <SmartSearch entries={entries} jobs={activeJobs} employees={employees} currentUser={currentUser} onOpenDay={openDayDetail} onSelectJob={(job) => { setForm((current) => ({ ...current, jobId: job.id, customerName: job.customerName || "", jobType: job.jobType || current.jobType })); goToSection("add"); }} />}
             {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <WeekAtGlance entries={currentWeekEntries} weekDateKeys={currentWeekDates} onOpenDay={openDayDetail} onAddHours={openQuickAddForDate} />}
-            {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <TimeHealthCard missingDays={missingWeekdays} currentWeekHours={currentWeekHours} liveShift={liveShift} onAddHours={openQuickAddForDate} onStopShift={stopLiveShiftAndFillForm} />}
-
             {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <EmployeeTodayPanel
               currentUser={currentUser}
               liveShift={liveShift}
@@ -2363,19 +2368,17 @@ export default function RestorationHoursTracker() {
               onOpenTimesheets={() => goToSection("timesheets")}
             />}
 
+            {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <DailyTimeline entries={personalEntries} liveShift={liveShift} onOpenEntry={(entry) => openDayDetail(entry.date, personalEntries.filter((item) => item.date === entry.date))} />}
+
             {activeSection === "dashboard" && appLoading && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-              {Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} />)}
+              {Array.from({ length: 4 }).map((_, index) => <SkeletonCard key={index} />)}
             </div>}
 
             {activeSection === "dashboard" && !appLoading && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-              <MetricCard icon={<Clock />} label="Pay Period Total" value={moneylessHours(payPeriodSummary.totalHours)} />
-              <MetricCard icon={<CheckCircle2 />} label="Regular Hours" value={moneylessHours(payPeriodSummary.regularHours)} />
-              <MetricCard icon={<Activity />} label="Overtime Hours" value={moneylessHours(payPeriodSummary.overtimeHours)} />
-              <MetricCard icon={<CalendarDays />} label="Vacation Hours" value={moneylessHours(payPeriodSummary.vacationHours)} />
-              <MetricCard icon={<Clock />} label="Week 1 Total" value={moneylessHours(weekOneSummary.totalHours)} />
-              <MetricCard icon={<Clock />} label="Week 2 Total" value={moneylessHours(weekTwoSummary.totalHours)} />
+              <MetricCard icon={<Clock />} label="Pay Period" value={moneylessHours(payPeriodSummary.totalHours)} />
+              <MetricCard icon={<CheckCircle2 />} label="Regular" value={moneylessHours(payPeriodSummary.regularHours)} />
+              <MetricCard icon={<Activity />} label="Overtime" value={moneylessHours(payPeriodSummary.overtimeHours)} />
               <MetricCard icon={<AlertCircle />} label="Pending" value={pendingCount} />
-              <MetricCard icon={<ShieldCheck />} label="Denied Hours" value={moneylessHours(deniedHoursTotal)} />
             </div>}
 
             <Card className={cx("overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/25 dark:border-white/10", !["dashboard", "timesheets"].includes(activeSection) && "hidden")}>
@@ -2630,9 +2633,8 @@ export default function RestorationHoursTracker() {
                 </div>
                 <div className="grid gap-2.5 md:grid-cols-2">
                   <Field label="Date"><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="input" /></Field>
-                  <Field label="Saved Job"><select value={form.jobId} onChange={(e) => applyJobSelection(e.target.value)} className="input"><option value="">Manual / one-time job</option>{activeJobs.map((job) => <option key={job.id} value={job.id}>{job.customerName}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</option>)}</select></Field>
                   <Field label="Job Type"><select value={form.jobType} onChange={(e) => setForm({ ...form, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
-                  <Field label="Job / Customer Name">
+                  <div className="md:col-span-2"><Field label="Job / Customer Name">
                     <input
                       list="weekly-job-suggestions"
                       value={form.customerName}
@@ -2652,8 +2654,8 @@ export default function RestorationHoursTracker() {
                         ))}
                       </div>
                     )}
-                    {weeklyJobSuggestions.length > 0 && <p className="mt-2 text-xs font-bold text-cyan-700 dark:text-cyan-300">Top suggestions are jobs already entered earlier this same week.</p>}
-                  </Field>
+                    {weeklyJobSuggestions.length > 0 && <p className="mt-2 text-xs font-bold text-cyan-700 dark:text-cyan-300">Suggested from jobs entered recently.</p>}
+                  </Field></div>
                   <Field label="Start Time"><input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} className="input" /></Field>
                   <Field label="End Time"><input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className="input" /></Field>
                   <Field label="Lunch Break"><div className="flex gap-2"><Button type="button" variant={form.lunchTaken ? "cool" : "outline"} className="flex-1" onClick={() => setForm({ ...form, lunchTaken: true })}>Yes</Button><Button type="button" variant={!form.lunchTaken ? "default" : "outline"} className="flex-1" onClick={() => setForm({ ...form, lunchTaken: false, lunchMinutes: 0 })}>No</Button></div></Field>
@@ -2783,10 +2785,11 @@ export default function RestorationHoursTracker() {
 
       {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} changePassword={changePassword} notificationPermission={notificationPermission} requestNotifications={requestNotifications} dailyClockReminder={dailyClockReminder} setDailyClockReminder={setDailyClockReminder} />}
       {nextJobOpen && <NextJobModal activeJobs={activeJobs} onStart={beginLiveShiftForJob} onClose={() => setNextJobOpen(false)} />}
-      {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} activeJobs={activeJobs} jobs={jobs} />}
+      {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
-      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} deleteHoursEntry={deleteHoursEntry} setReviewModal={openDenyModal} openQuickAddForDate={openQuickAddForDate} />}
+      <AnimatePresence>{liveShift && <FloatingLiveTimer liveShift={liveShift} onStop={stopLiveShiftAndFillForm} />}</AnimatePresence>
+      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} duplicateHoursEntry={duplicateHoursEntry} deleteHoursEntry={deleteHoursEntry} setReviewModal={openDenyModal} openQuickAddForDate={openQuickAddForDate} />}
       <style>{inputStyles}</style>
     </div>
   );
@@ -2864,7 +2867,7 @@ function EmployeeTodayPanel({ currentUser, liveShift, startedAt, todayEntries, w
             </div>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            {!liveShift && <Button type="button" variant="cool" onClick={onStart} className="min-h-12"><Fingerprint className="h-4 w-4" /> Start Clock</Button>}
+            {!liveShift && <Button type="button" variant="cool" onClick={() => { triggerNativeFeedback("success"); onStart(); }} className="one-tap-clock min-h-14"><Fingerprint className="h-5 w-5" /> One-Tap Clock In</Button>}
             <Button type="button" variant="outline" onClick={onAddHours} className="min-h-12 border-white/15 bg-white/10 text-white hover:bg-white/15"><Plus className="h-4 w-4" /> Add Hours</Button>
             <Button type="button" variant="outline" onClick={onOpenTimesheets} className="min-h-12 border-white/15 bg-white/10 text-white hover:bg-white/15"><CalendarDays className="h-4 w-4" /> Timesheet</Button>
           </div>
@@ -2926,25 +2929,15 @@ function NextJobModal({ activeJobs = [], onStart, onClose }) {
   return (
     <div className="native-sheet fixed inset-0 z-[55] flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
       <motion.div initial={{ opacity: 0, y: 22, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[88vh] w-full max-w-xl overflow-auto rounded-[2rem] border border-white/60 bg-slate-50/95 p-5 shadow-2xl dark:border-white/10 dark:bg-slate-950/95">
-        <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Previous job submitted</p><h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">Start the next job</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Choose a saved job and the new timer starts immediately.</p></div><Button variant="ghost" onClick={onClose}><X className="h-5 w-5" /></Button></div>
+        <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Hours submitted</p><h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">Start the next job</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Choose a recent job and the new timer starts immediately.</p></div><Button variant="ghost" onClick={onClose}><X className="h-5 w-5" /></Button></div>
         <div className="relative mt-4"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-11" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search customer, job number, or type…" /></div>
         <div className="mt-3 space-y-2">{filteredJobs.map((job) => <button key={job.id} type="button" onClick={() => onStart(job)} className="w-full rounded-3xl border border-white/70 bg-white/75 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/5"><p className="font-black text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</p></button>)}{!filteredJobs.length && <div className="rounded-3xl border border-dashed border-slate-300 p-5 text-center text-sm font-bold text-slate-500 dark:border-white/10">No matching active jobs.</div>}</div>
-        <Button variant="outline" className="mt-4 w-full" onClick={() => onStart(null)}><Plus className="mr-2 h-4 w-4" /> Start Manual Job</Button>
       </motion.div>
     </div>
   );
 }
 
-function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitRecordedShift, activeJobs = [], jobs = [] }) {
-  function applyRecordedJob(jobId) {
-    const selectedJob = jobs.find((job) => job.id === jobId);
-    setStoppedShiftReview((current) => ({
-      ...current,
-      jobId,
-      jobType: selectedJob?.jobType || current.jobType,
-      customerName: selectedJob?.customerName || current.customerName,
-    }));
-  }
+function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitRecordedShift }) {
   return (
     <div className="native-sheet fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
       <motion.div
@@ -2963,7 +2956,6 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Date"><input type="date" value={stoppedShiftReview.date} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, date: e.target.value })} className="input" /></Field>
-          <Field label="Saved Job"><select value={stoppedShiftReview.jobId || ""} onChange={(e) => applyRecordedJob(e.target.value)} className="input"><option value="">Manual / one-time job</option>{activeJobs.map((job) => <option key={job.id} value={job.id}>{job.customerName}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</option>)}</select></Field>
           <Field label="Job Type"><select value={stoppedShiftReview.jobType} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
           <div><Field label="Job / Customer Name"><input value={stoppedShiftReview.customerName} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, customerName: e.target.value })} className="input" placeholder="Example: Smith Residence" /></Field></div>
           <Field label="Start Time"><input type="time" value={stoppedShiftReview.start} onChange={(e) => setStoppedShiftReview({ ...stoppedShiftReview, start: e.target.value })} className="input" /></Field>
@@ -3081,7 +3073,7 @@ function DocumentationWeek({ title, entries, getName, openDayDetail }) {
   );
 }
 
-function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, updateStatus, openEditModal, deleteHoursEntry, setReviewModal, openQuickAddForDate }) {
+function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, updateStatus, openEditModal, duplicateHoursEntry, deleteHoursEntry, setReviewModal, openQuickAddForDate }) {
   const dayEntries = dayDetail.entries || [];
   const activeEntries = dayEntries.filter((entry) => !isDeniedEntry(entry));
   const deniedEntries = dayEntries.filter((entry) => isDeniedEntry(entry));
@@ -3143,10 +3135,11 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
                 )}
 
                 {currentUser?.role === "admin" && (
-                  <div className="admin-entry-actions mt-3 grid grid-cols-2 gap-2 rounded-[1.35rem] border border-slate-100 bg-slate-50/80 p-2.5 dark:border-white/10 dark:bg-white/5 sm:grid-cols-4">
+                  <div className="admin-entry-actions mt-3 grid grid-cols-2 gap-2 rounded-[1.35rem] border border-slate-100 bg-slate-50/80 p-2.5 dark:border-white/10 dark:bg-white/5 sm:grid-cols-5">
                     <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
                     <Button size="sm" variant="danger" onClick={() => setReviewModal(entry)}>Deny</Button>
                     <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit / Move</Button>
+                    <Button size="sm" variant="outline" onClick={() => duplicateHoursEntry(entry)}><Plus className="mr-1 h-3.5 w-3.5" /> Duplicate</Button>
                     <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10" onClick={() => deleteHoursEntry(entry)}><Trash2 className="mr-1 h-3.5 w-3.5" /> Delete</Button>
                   </div>
                 )}
