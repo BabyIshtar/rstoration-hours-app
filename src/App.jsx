@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
+  Trash2,
   Upload,
   UserRound,
   Users,
@@ -496,7 +497,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
   ];
 
   return (
-    <motion.nav {...softMotion} className="mb-4 rounded-[1.6rem] border border-white/55 bg-white/72 p-2 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/66 dark:ring-white/10">
+    <motion.nav {...softMotion} className="mb-4 hidden md:block rounded-[1.6rem] border border-white/55 bg-white/72 p-2 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/66 dark:ring-white/10">
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-9">
         {items.map((item) => {
           const selected = activeSection === item.id;
@@ -510,6 +511,229 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
       </div>
     </motion.nav>
   );
+}
+
+
+function MobileBottomNav({ activeSection, setActiveSection, isAdmin, pendingCount = 0 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const items = [
+    { id: "dashboard", label: "Home", icon: <Activity /> },
+    { id: "timesheets", label: "Time", icon: <CalendarDays /> },
+    { id: "add", label: "Add", icon: <Plus />, primary: true },
+    { id: "review", label: isAdmin ? "Review" : "Entries", icon: <CheckCircle2 />, badge: isAdmin ? pendingCount : 0 },
+    { id: "more", label: "More", icon: <Sparkles /> },
+  ];
+  const moreItems = isAdmin
+    ? [
+        { id: "manage", label: "Team Controls", icon: <Users /> },
+        { id: "history", label: "History + Audit", icon: <Clock /> },
+        { id: "exports", label: "Docs + Exports", icon: <FileText /> },
+        { id: "updates", label: "Team Updates", icon: <Bell /> },
+        { id: "tools", label: "App Tools", icon: <Settings /> },
+      ]
+    : [
+        { id: "exports", label: "Docs + Exports", icon: <FileText /> },
+        { id: "updates", label: "Updates", icon: <Bell /> },
+        { id: "tools", label: "App Tools", icon: <Settings /> },
+      ];
+  const moreSelected = moreItems.some((item) => item.id === activeSection);
+
+  const navigate = (id) => {
+    triggerNativeFeedback(id === "add" ? "success" : "light");
+    setMoreOpen(false);
+    setActiveSection(id);
+  };
+
+  return (
+    <>
+      <AnimatePresence>
+        {moreOpen && (
+          <motion.div className="mobile-more-backdrop no-print md:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMoreOpen(false)}>
+            <motion.div className="mobile-more-sheet" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }} transition={spring} onClick={(event) => event.stopPropagation()}>
+              <div className="mobile-more-handle" />
+              <div className="mb-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300">Voda Time</p><h2 className="text-xl font-black tracking-[-0.04em]">More</h2></div><button type="button" aria-label="Close More menu" className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300" onClick={() => setMoreOpen(false)}><X className="h-4 w-4" /></button></div>
+              <div className="grid grid-cols-2 gap-2">
+                {moreItems.map((item) => <button key={item.id} type="button" onClick={() => navigate(item.id)} className={cx("flex min-h-[84px] flex-col items-start justify-between rounded-[1.35rem] border p-3 text-left", activeSection === item.id ? "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-100" : "border-slate-200 bg-white/75 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200")}>{React.cloneElement(item.icon, { className: "h-5 w-5" })}<span className="text-xs font-black">{item.label}</span></button>)}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <nav className="native-bottom-nav no-print md:hidden" aria-label="Primary navigation">
+        <div className="native-bottom-nav-inner">
+          {items.map((item) => {
+            const selected = item.id === "more" ? moreOpen || moreSelected : activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => item.id === "more" ? setMoreOpen((value) => !value) : navigate(item.id)}
+                className={cx("native-bottom-nav-item", selected && "is-active", item.primary && "is-primary")}
+                aria-current={selected && item.id !== "more" ? "page" : undefined}
+              >
+                <span className="native-bottom-nav-icon">
+                  {React.cloneElement(item.icon, { className: "h-[19px] w-[19px]" })}
+                  {item.badge > 0 && <span className="native-bottom-nav-badge">{item.badge > 99 ? "99+" : item.badge}</span>}
+                </span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    </>
+  );
+}
+
+function WeekAtGlance({ entries = [], weekDateKeys = [], onOpenDay, onAddHours }) {
+  const today = phoenixDateKey();
+  const total = entries.filter((entry) => !isDeniedEntry(entry)).reduce((sum, entry) => sum + entryHours(entry), 0);
+  const elapsedWorkdays = weekDateKeys.filter((key, index) => index < 5 && key <= today).length || 1;
+  const projected = Math.max(total, (total / elapsedWorkdays) * 5);
+  const overtimeForecast = Math.max(0, projected - 40);
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-end justify-between gap-3 px-4 pb-3 pt-4 sm:px-5 sm:pt-5">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Week at a Glance</p>
+            <h2 className="mt-1 text-xl font-black tracking-[-0.04em]">{total.toFixed(1)} hours this week</h2>
+          </div>
+          <div className={cx("rounded-full px-3 py-1.5 text-[11px] font-black", overtimeForecast > 0 ? "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-200" : "bg-cyan-50 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200")}>
+            {overtimeForecast > 0 ? `~${overtimeForecast.toFixed(1)}h OT forecast` : `~${projected.toFixed(1)}h projected`}
+          </div>
+        </div>
+        <div className="week-glance-strip px-3 pb-4 sm:px-4">
+          {weekDateKeys.map((dateKey, index) => {
+            const dayEntries = entries.filter((entry) => entry.date === dateKey);
+            const activeEntries = dayEntries.filter((entry) => !isDeniedEntry(entry));
+            const hours = activeEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+            const pending = activeEntries.some(isPendingEntry);
+            const isToday = dateKey === today;
+            const isFuture = dateKey > today;
+            return (
+              <button key={dateKey} type="button" onClick={() => dayEntries.length ? onOpenDay(dateKey, dayEntries) : onAddHours(dateKey)} className={cx("week-glance-day", isToday && "is-today", hours > 0 && "has-hours")}>
+                <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{weekdays[index]}</span>
+                <span className="mt-2 text-lg font-black tabular-nums">{hours > 0 ? `${hours.toFixed(1)}h` : isFuture ? "—" : "0h"}</span>
+                <span className={cx("mt-2 h-1.5 w-1.5 rounded-full", isFuture ? "bg-slate-300/50" : hours === 0 ? "bg-red-400" : pending ? "bg-amber-400" : "bg-emerald-400")} />
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimeHealthCard({ missingDays = [], currentWeekHours = 0, liveShift, onAddHours, onStopShift }) {
+  const today = phoenixDateKey();
+  const workdayNumber = Math.max(1, Math.min(5, phoenixDateKeyToDate(today).getUTCDay() || 7));
+  const projected = Math.max(currentWeekHours, (currentWeekHours / workdayNumber) * 5);
+  const overtimeForecast = Math.max(0, projected - 40);
+
+  return (
+    <Card>
+      <CardContent>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Time Health</p><h2 className="text-lg font-black tracking-[-0.03em]">Payroll checkup</h2></div>
+          <Clock className="h-6 w-6 text-cyan-700 dark:text-cyan-300" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[1.35rem] border border-white/70 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">40-hour forecast</p>
+            <p className="mt-1 text-2xl font-black tabular-nums">{projected.toFixed(1)}h</p>
+            <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{overtimeForecast > 0 ? `${overtimeForecast.toFixed(1)} projected overtime hours` : `${Math.max(0, 40 - projected).toFixed(1)}h below overtime pace`}</p>
+          </div>
+          <div className="rounded-[1.35rem] border border-white/70 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Missing weekdays</p>
+            <p className="mt-1 text-2xl font-black tabular-nums">{missingDays.length}</p>
+            <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{missingDays.length ? missingDays.map((key) => displayShortDate(key)).join(" · ") : "All elapsed weekdays have time entered."}</p>
+          </div>
+        </div>
+        {missingDays.length > 0 && !liveShift && <Button variant="outline" className="mt-3 w-full" onClick={() => onAddHours(missingDays[0])}><Plus className="h-4 w-4" /> Add missing hours</Button>}
+        {liveShift && <ShiftHealthBanner liveShift={liveShift} onStopShift={onStopShift} />}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ShiftHealthBanner({ liveShift, onStopShift }) {
+  const [tick, setTick] = useState(Date.now());
+  useEffect(() => {
+    if (!liveShift?.startedAt) return undefined;
+    const timer = window.setInterval(() => setTick(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [liveShift?.startedAt]);
+  if (!liveShift?.startedAt) return null;
+  const elapsedHours = Math.max(0, (tick - new Date(liveShift.startedAt).getTime()) / 3600000);
+  if (elapsedHours < 10) return null;
+  return (
+    <div className={cx("mt-3 flex flex-col gap-3 rounded-[1.35rem] border p-4 sm:flex-row sm:items-center sm:justify-between", elapsedHours >= 12 ? "border-red-200 bg-red-50 dark:border-red-300/15 dark:bg-red-500/10" : "border-amber-200 bg-amber-50 dark:border-amber-300/15 dark:bg-amber-400/10")}>
+      <div><p className="text-sm font-black">Clock has been running {elapsedHours.toFixed(1)} hours</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">Double-check that you didn’t forget to clock out.</p></div>
+      <Button size="sm" variant={elapsedHours >= 12 ? "danger" : "outline"} onClick={onStopShift}>Stop & review</Button>
+    </div>
+  );
+}
+
+function EmployeeActivityTimeline({ events = [], currentUser, employeeById }) {
+  const visible = events.filter((event) => currentUser?.role === "admin" || event.employeeId === currentUser?.id).slice(0, 8);
+  return (
+    <Card>
+      <CardContent>
+        <div className="mb-4 flex items-center justify-between"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Activity</p><h2 className="text-lg font-black tracking-[-0.03em]">Timesheet timeline</h2></div><Clock className="h-5 w-5 text-cyan-700 dark:text-cyan-300" /></div>
+        {visible.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm font-semibold text-slate-500 dark:border-white/10 dark:text-slate-400">New submissions, edits, approvals, moves, and deletes will appear here.</p> : (
+          <div className="activity-timeline">
+            {visible.map((event) => <div key={event.id} className="activity-timeline-item"><span className="activity-timeline-dot" /><div className="min-w-0"><p className="text-sm font-black">{event.label}</p><p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{employeeById.get(event.employeeId)?.name || (event.employeeId === currentUser?.id ? currentUser?.name : "Employee")} · {new Date(event.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>{event.detail && <p className="mt-1 clean-wrap text-xs font-bold text-slate-600 dark:text-slate-300">{event.detail}</p>}</div></div>)}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AuditTrailPanel({ events = [], employeeById, currentUser }) {
+  return (
+    <Card>
+      <CardContent>
+        <div className="mb-4"><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Audit Trail</p><h2 className="text-lg font-black tracking-[-0.03em]">Who changed what</h2><p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Tracks edits, moves, approvals, denials, deletes, and restores. Run the included audit SQL for shared cross-device history.</p></div>
+        <div className="space-y-2">
+          {events.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-sm font-semibold text-slate-500 dark:border-white/10 dark:text-slate-400">No admin actions recorded yet.</div> : events.slice(0, 75).map((event) => (
+            <div key={event.id} className="rounded-[1.25rem] border border-slate-100 bg-white/70 p-3.5 dark:border-white/10 dark:bg-white/5">
+              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="clean-wrap text-sm font-black">{event.label}</p><p className="mt-1 clean-wrap text-xs font-bold text-slate-500 dark:text-slate-400">{employeeById.get(event.employeeId)?.name || "Employee"}{event.detail ? ` · ${event.detail}` : ""}</p></div><span className="shrink-0 text-[10px] font-black text-slate-400">{new Date(event.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span></div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ApprovalFocusCard({ entries = [], employeeById, onApprove, onDeny, onEdit }) {
+  const [index, setIndex] = useState(0);
+  const swipeX = useRef(null);
+  useEffect(() => { if (index >= entries.length) setIndex(Math.max(0, entries.length - 1)); }, [entries.length, index]);
+  if (!entries.length) return null;
+  const entry = entries[index] || entries[0];
+  const employee = employeeById.get(entry.employeeId);
+  const move = (delta) => setIndex((value) => Math.max(0, Math.min(entries.length - 1, value + delta)));
+  return (
+    <Card className="mb-4 overflow-hidden border-cyan-300/20">
+      <CardContent>
+        <div className="mb-3 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300">Quick Review</p><h2 className="text-lg font-black">{index + 1} of {entries.length}</h2></div><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">{entryHours(entry).toFixed(2)}h</span></div>
+        <div onTouchStart={(e) => { swipeX.current = e.changedTouches[0]?.clientX ?? null; }} onTouchEnd={(e) => { if (swipeX.current == null) return; const delta = (e.changedTouches[0]?.clientX ?? swipeX.current) - swipeX.current; if (Math.abs(delta) > 55) move(delta < 0 ? 1 : -1); swipeX.current = null; }} className="rounded-[1.35rem] border border-white/70 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-black">{employee?.name || "Employee"}</p><p className="mt-1 clean-wrap text-lg font-black tracking-[-0.03em]">{entry.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
+          {entry.notes && <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-600 dark:bg-white/5 dark:text-slate-300">{entry.notes}</p>}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2"><Button variant="success" onClick={() => onApprove(entry.id, "approved")}>Approve</Button><Button variant="danger" onClick={() => onDeny(entry)}>Deny</Button><Button variant="outline" onClick={() => onEdit(entry)}>Edit / Move</Button><div className="grid grid-cols-2 gap-2"><Button variant="ghost" disabled={index === 0} onClick={() => move(-1)}><ChevronLeft className="h-4 w-4" /></Button><Button variant="ghost" disabled={index === entries.length - 1} onClick={() => move(1)}><ChevronRight className="h-4 w-4" /></Button></div></div>
+        <p className="mt-2 text-center text-[10px] font-bold text-slate-400 md:hidden">Swipe the card left or right to move through entries.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AppSkeleton() {
+  return <div className="space-y-4" aria-label="Loading dashboard"><div className="skeleton-block h-36 rounded-[1.6rem]" /><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton-block h-24 rounded-[1.4rem]" />)}</div><div className="skeleton-block h-64 rounded-[1.6rem]" /></div>;
 }
 
 function EntryDetails({ entry, employee }) {
@@ -529,7 +753,7 @@ function EntryDetails({ entry, employee }) {
 }
 
 
-function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleApprovalGroup, updateStatus, approveAllPendingEntries, setReviewModal, openEditModal, setSelectedEmployeeId, setActiveSection, search, setSearch, approvingAll }) {
+function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleApprovalGroup, updateStatus, approveAllPendingEntries, setReviewModal, openEditModal, deleteHoursEntry, setSelectedEmployeeId, setActiveSection, search, setSearch, approvingAll }) {
   const pendingTotal = approvalGroups.reduce((sum, group) => sum + group.entries.length, 0);
   const pendingHours = approvalGroups.reduce((sum, group) => sum + group.totalHours, 0);
 
@@ -593,10 +817,11 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
                         </div>
                         <EntryDetails entry={entry} employee={employee} />
                         {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
-                        <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5 sm:grid-cols-3">
+                        <div className="admin-entry-actions mt-3 grid grid-cols-2 gap-2 rounded-[1.35rem] border border-slate-100 bg-slate-50/80 p-2.5 dark:border-white/10 dark:bg-white/5 sm:grid-cols-4">
                           <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
                           <Button size="sm" variant="danger" onClick={() => setReviewModal(entry)}>Deny</Button>
-                          <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button>
+                          <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit / Move</Button>
+                          <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10" onClick={() => deleteHoursEntry(entry)}><Trash2 className="mr-1 h-3.5 w-3.5" /> Delete</Button>
                         </div>
                       </article>
                     ))}
@@ -732,7 +957,6 @@ export default function RestorationHoursTracker() {
   const [loginError, setLoginError] = useState("");
   const [appError, setAppError] = useState("");
   const [darkMode, setDarkMode] = useState(false);
-  const [now, setNow] = useState(new Date());
   const [installPrompt, setInstallPrompt] = useState(null);
   const [notificationPermission, setNotificationPermission] = useState(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
   const [dailyClockReminder, setDailyClockReminder] = useState(() => localStorage.getItem("vodaDailyClockReminder") !== "off");
@@ -762,6 +986,10 @@ export default function RestorationHoursTracker() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [nextJobOpen, setNextJobOpen] = useState(false);
   const [activeSection, setActiveSection] = useState(() => localStorage.getItem("vodaActiveSection") || "dashboard");
+  const [auditEvents, setAuditEvents] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("vodaAuditEvents") || "[]"); } catch { return []; }
+  });
+  const [recentlyDeleted, setRecentlyDeleted] = useState(null);
   const [expandedApprovalGroups, setExpandedApprovalGroups] = useState({});
   const [messages, setMessages] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -849,10 +1077,36 @@ export default function RestorationHoursTracker() {
     if (currentUser) loadAppData();
   }, [currentUser]);
 
+  // Keep admin and employee timesheets in sync without repeatedly reloading the full app.
+  // A delete/edit/approval made by an admin is reflected on the employee device immediately.
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+    if (!currentUser?.id) return;
+    const filter = currentUser.role === "admin" ? undefined : `employee_id=eq.${currentUser.id}`;
+    let channel = supabase.channel(`voda-time-entries-${currentUser.id}`);
+    const options = { event: "*", schema: "public", table: "time_entries" };
+    if (filter) options.filter = filter;
+    channel = channel.on("postgres_changes", options, (payload) => {
+      const rawEntry = payload.new?.id ? normalizeEntry(payload.new) : null;
+      if (rawEntry && currentUser.role !== "admin") {
+        const status = entryApprovalStatus(rawEntry);
+        setAuditEvents((current) => [{ id: `rt-${Date.now()}-${rawEntry.id}`, action: status, label: status === "approved" ? "Hours approved" : status === "denied" ? "Hours denied" : "Timesheet updated", detail: `${rawEntry.customerName} · ${displayShortDate(rawEntry.date)}`, employeeId: rawEntry.employeeId, entryId: rawEntry.id, actorId: null, createdAt: new Date().toISOString() }, ...current.filter((event) => event.entryId !== rawEntry.id || event.action !== status)].slice(0, 150));
+      }
+      if (payload.eventType === "DELETE") {
+        const deletedId = payload.old?.id;
+        if (deletedId) setEntries((current) => current.filter((entry) => entry.id !== deletedId));
+        return;
+      }
+      if (!payload.new?.id) return;
+      const normalized = normalizeEntry(payload.new);
+      setEntries((current) => {
+        const exists = current.some((entry) => entry.id === normalized.id);
+        if (!exists) return [normalized, ...current];
+        return current.map((entry) => entry.id === normalized.id ? normalized : entry);
+      });
+    }).subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser?.id, currentUser?.role]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event) => {
@@ -881,6 +1135,10 @@ export default function RestorationHoursTracker() {
   useEffect(() => {
     localStorage.setItem("vodaActiveSection", activeSection);
   }, [activeSection]);
+
+  useEffect(() => {
+    localStorage.setItem("vodaAuditEvents", JSON.stringify(auditEvents.slice(0, 150)));
+  }, [auditEvents]);
 
   useEffect(() => {
     localStorage.setItem("vodaDailyClockReminder", dailyClockReminder ? "on" : "off");
@@ -1035,6 +1293,10 @@ export default function RestorationHoursTracker() {
       createdAt: message.created_at,
     })));
     setJobs((jobsResponse.data || []).map((job) => ({ id: job.id, customerName: job.customer_name || "Unnamed Job", jobNumber: job.job_number || "", jobType: job.job_type || "Other", address: job.address || "", carrier: job.carrier || "", claimNumber: job.claim_number || "", assignedEmployeeId: job.assigned_employee_id || "", status: job.status || "active", createdAt: job.created_at })));
+    supabase.from("time_entry_audit_log").select("*").order("created_at", { ascending: false }).limit(isAdmin ? 100 : 40).then(({ data }) => {
+      if (!data?.length) return;
+      setAuditEvents(data.map((event) => ({ id: event.id, action: event.action, label: event.label || event.action, detail: event.detail || "", employeeId: event.employee_id, entryId: event.entry_id, createdAt: event.created_at, actorId: event.actor_id })));
+    }).catch(() => {});
     setAppLoading(false);
   }
 
@@ -1107,6 +1369,8 @@ export default function RestorationHoursTracker() {
   const currentWeekStart = formatDate(getMonday(phoenixDateKeyToDate(todayKey)));
   const currentWeekDates = Array.from({ length: 7 }, (_, index) => formatDate(addDays(phoenixDateKeyToDate(currentWeekStart), index)));
   const currentWeekEntries = personalEntries.filter((entry) => currentWeekDates.includes(entry.date));
+  const currentWeekHours = currentWeekEntries.filter((entry) => !isDeniedEntry(entry)).reduce((sum, entry) => sum + entryHours(entry), 0);
+  const missingWeekdays = currentWeekDates.slice(0, 5).filter((dateKey) => dateKey <= todayKey && !currentWeekEntries.some((entry) => entry.date === dateKey && !isDeniedEntry(entry)));
   const recentJobNames = [...new Set(sortEntriesByDateTime(personalEntries).reverse().map((entry) => entry.customerName).filter(Boolean))];
 
   const employeeSummaries = useMemo(() => {
@@ -1325,15 +1589,6 @@ export default function RestorationHoursTracker() {
     setLiveShift(null);
   }
 
-  function liveShiftElapsed() {
-    if (!liveShift?.startedAt) return "0:00:00";
-    const diff = Math.max(0, Math.floor((now.getTime() - new Date(liveShift.startedAt).getTime()) / 1000));
-    const hours = Math.floor(diff / 3600);
-    const minutes = Math.floor((diff % 3600) / 60);
-    const seconds = diff % 60;
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-
   async function uploadJobPhoto(file) {
     if (!file || !currentUser) return;
     setAppError("");
@@ -1473,6 +1728,7 @@ export default function RestorationHoursTracker() {
 
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) return setAppError(error.message);
+    await recordAudit({ action: "submit", label: "Hours submitted", detail: `${form.customerName.trim()} · ${displayDate(form.date)} · ${entryHours(form).toFixed(2)}h`, employeeId: currentUser.id });
     notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
     setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
     localStorage.removeItem(`vodaEntryDraft:${currentUser.id}`);
@@ -1529,6 +1785,7 @@ export default function RestorationHoursTracker() {
 
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) return setAppError(error.message);
+    await recordAudit({ action: "submit", label: "Recorded shift submitted", detail: `${stoppedShiftReview.customerName.trim()} · ${displayDate(stoppedShiftReview.date)} · ${entryHours(stoppedShiftReview).toFixed(2)}h`, employeeId: currentUser.id });
 
     notifyUser("Recorded shift submitted", `${stoppedShiftReview.customerName.trim()} was added to your timesheet.`);
     setStoppedShiftReview(null);
@@ -1574,6 +1831,59 @@ export default function RestorationHoursTracker() {
     );
   }
 
+  function entryToInsertPayload(entry) {
+    return {
+      employee_id: entry.employeeId,
+      job_id: entry.jobId || null,
+      job_type: entry.jobType,
+      customer_name: entry.customerName,
+      work_date: entry.date,
+      start_time: entry.start,
+      end_time: entry.end,
+      lunch_taken: Boolean(entry.lunchTaken),
+      lunch_minutes: entry.lunchTaken ? Number(entry.lunchMinutes || 0) : 0,
+      notes: entry.notes || "",
+      photo_url: entry.photoUrl || null,
+      employee_signature: entry.employeeSignature || null,
+      gps_lat: entry.gpsLat || null,
+      gps_lng: entry.gpsLng || null,
+      approval_status: entry.approvalStatus || "pending",
+      status: entry.status || entry.approvalStatus || "pending",
+      denial_reason: entry.denialReason || null,
+    };
+  }
+
+  async function recordAudit({ action, label, detail = "", entry = null, employeeId = null, entryId = null }) {
+    const event = {
+      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      action,
+      label,
+      detail,
+      employeeId: employeeId || entry?.employeeId || null,
+      entryId: entryId || entry?.id || null,
+      actorId: currentUser?.id || null,
+      createdAt: new Date().toISOString(),
+    };
+    setAuditEvents((current) => [event, ...current].slice(0, 150));
+    if (currentUser?.role === "admin") {
+      supabase.from("time_entry_audit_log").insert({ action: event.action, label: event.label, detail: event.detail, employee_id: event.employeeId, entry_id: event.entryId, actor_id: event.actorId }).then(() => {}).catch(() => {});
+    }
+  }
+
+  async function undoDeleteHours() {
+    if (!recentlyDeleted?.entry || currentUser?.role !== "admin") return;
+    const snapshot = recentlyDeleted.entry;
+    setAppError("");
+    const { data, error } = await supabase.from("time_entries").insert(entryToInsertPayload(snapshot)).select("*").single();
+    if (error) return setAppError(`Could not restore deleted hours: ${error.message}`);
+    const restored = normalizeEntry(data);
+    setEntries((current) => [restored, ...current]);
+    await recordAudit({ action: "restore", label: "Deleted hours restored", detail: `${snapshot.customerName} · ${displayDate(snapshot.date)}`, entry: restored });
+    await createPortalMessage({ recipientId: snapshot.employeeId, title: "Hours restored by admin", body: `${snapshot.customerName} on ${displayDate(snapshot.date)} was restored to your timesheet.`, relatedEntryId: restored.id });
+    setRecentlyDeleted(null);
+    notifyUser("Hours restored", `${snapshot.customerName} was restored.`);
+  }
+
   async function updateStatus(id, approvalStatus, denialReason = "") {
     setAppError("");
     const { error } = await supabase
@@ -1588,6 +1898,7 @@ export default function RestorationHoursTracker() {
     if (error) return setAppError(error.message);
     const entry = entries.find((item) => item.id === id);
     if (entry) {
+      await recordAudit({ action: approvalStatus, label: approvalStatus === "approved" ? "Hours approved" : approvalStatus === "denied" ? "Hours denied" : "Hours status updated", detail: `${entry.customerName} · ${displayDate(entry.date)}${denialReason ? ` · ${denialReason}` : ""}`, entry });
       const employee = employeeById.get(entry.employeeId);
       const friendlyStatus = approvalStatus === "approved" ? "approved" : approvalStatus === "denied" ? "denied" : "updated";
       await createPortalMessage({
@@ -1627,6 +1938,7 @@ export default function RestorationHoursTracker() {
       body: `${entry.customerName} on ${displayDate(entry.date)} was approved.`,
       relatedEntryId: entry.id,
     })));
+    pendingApprovalEntries.forEach((entry) => recordAudit({ action: "approved", label: "Hours approved", detail: `${entry.customerName} · ${displayDate(entry.date)} · Approve All`, entry }));
     notifyUser("Pending hours approved", `${ids.length} pending entr${ids.length === 1 ? "y" : "ies"} approved and moved to history.`);
     await loadAppData();
     setApprovingAll(false);
@@ -1673,6 +1985,8 @@ export default function RestorationHoursTracker() {
     if (error) return setAppError(error.message);
     const entry = entries.find((item) => item.id === editModal.id);
     if (entry) {
+      const moved = entry.date !== editModal.date;
+      await recordAudit({ action: moved ? "move" : "edit", label: moved ? "Hours moved to another date" : "Hours edited", detail: moved ? `${entry.customerName} · ${displayDate(entry.date)} → ${displayDate(editModal.date)}` : `${entry.customerName} · ${displayDate(entry.date)}`, entry });
       await createPortalMessage({
         recipientId: entry.employeeId,
         title: "Hours edited by admin",
@@ -1683,6 +1997,33 @@ export default function RestorationHoursTracker() {
     closeTransientPanels();
     setActiveSection(currentUser?.role === "admin" ? "review" : "timesheets");
     await loadAppData();
+  }
+
+  async function deleteHoursEntry(entry) {
+    if (!entry?.id || currentUser?.role !== "admin") return;
+    const employeeName = employeeById.get(entry.employeeId)?.name || "this employee";
+    const confirmed = window.confirm(`Delete ${entryHours(entry).toFixed(2)} hours for ${employeeName} on ${displayDate(entry.date)}? This removes the entry from the employee's timesheet too.`);
+    if (!confirmed) return;
+
+    setAppError("");
+    // Optimistic removal makes admin actions feel instant. Realtime keeps other devices synchronized.
+    const previousEntries = entries;
+    setEntries((current) => current.filter((item) => item.id !== entry.id));
+    const { error } = await supabase.from("time_entries").delete().eq("id", entry.id);
+    if (error) {
+      setEntries(previousEntries);
+      return setAppError(error.message);
+    }
+    setRecentlyDeleted({ entry, deletedAt: Date.now() });
+    await recordAudit({ action: "delete", label: "Hours deleted", detail: `${entry.customerName} · ${displayDate(entry.date)} · ${entryHours(entry).toFixed(2)}h`, entry });
+    await createPortalMessage({
+      recipientId: entry.employeeId,
+      title: "Hours removed by admin",
+      body: `${entry.customerName} on ${displayDate(entry.date)} was removed from your timesheet by an admin.`,
+      relatedEntryId: null,
+    });
+    setDayDetail((current) => current ? { ...current, entries: current.entries.filter((item) => item.id !== entry.id) } : current);
+    notifyUser("Hours removed", `${entry.customerName} was deleted from ${employeeName}'s timesheet.`);
   }
 
   function openDayDetail(dateValue, dayEntries = []) {
@@ -1933,6 +2274,8 @@ export default function RestorationHoursTracker() {
 
   return (
     <div className={cx("relative min-h-screen w-full overflow-x-hidden mobile-safe font-[Inter,ui-sans-serif,system-ui] text-slate-950 transition-all duration-500 dark:text-white", darkMode && "dark", darkMode ? "bg-[radial-gradient(circle_at_top_left,#263846,transparent_28%),radial-gradient(circle_at_bottom_right,#17202b,transparent_32%),linear-gradient(180deg,#0e141b,#141b24)]" : "bg-[radial-gradient(circle_at_top_left,#d8eef4,transparent_26%),radial-gradient(circle_at_bottom_right,#cfd9e1,transparent_30%),linear-gradient(180deg,#f4f7f8,#e3e9ed)]")} onTouchStart={handleRefreshTouchStart} onTouchEnd={handleRefreshTouchEnd}>
+      <MobileBottomNav activeSection={activeSection} setActiveSection={goToSection} isAdmin={currentUser.role === "admin"} pendingCount={pendingCount} />
+      <AnimatePresence>{recentlyDeleted && <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="undo-toast no-print"><div className="min-w-0"><p className="text-sm font-black">Hours deleted</p><p className="clean-wrap text-xs font-semibold text-slate-500 dark:text-slate-400">{recentlyDeleted.entry.customerName} · {displayShortDate(recentlyDeleted.entry.date)}</p></div><Button size="sm" variant="outline" onClick={undoDeleteHours}>Undo</Button><button aria-label="Dismiss undo" className="rounded-full p-2 text-slate-400" onClick={() => setRecentlyDeleted(null)}><X className="h-4 w-4" /></button></motion.div>}</AnimatePresence>
       <AnimatePresence>
         {showSplash && (
           <motion.div
@@ -1959,7 +2302,7 @@ export default function RestorationHoursTracker() {
       </AnimatePresence>
       <div className="pointer-events-none fixed -left-28 top-20 h-80 w-80 rounded-full bg-cyan-300/14 blur-3xl" />
       <div className="pointer-events-none fixed -right-32 top-1/2 h-96 w-96 rounded-full bg-slate-600/12 blur-3xl" />
-      <div className="relative mx-auto w-full max-w-[1540px] overflow-x-hidden px-3 py-3 sm:px-4 sm:py-4 lg:px-5 mobile-padding">
+      <div className="relative mx-auto w-full max-w-[1540px] overflow-x-hidden px-3 py-3 pb-28 sm:px-4 sm:py-4 sm:pb-28 md:pb-4 lg:px-5 mobile-padding">
         <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex max-w-full flex-col gap-3 overflow-hidden rounded-[1.6rem] border border-white/55 bg-white/74 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-cyan-700/10 ring-1 ring-white/80 sm:h-12 sm:w-12">
@@ -1987,6 +2330,7 @@ export default function RestorationHoursTracker() {
         {appLoading && <div className="mb-4 rounded-3xl border border-cyan-200/70 bg-cyan-50/75 p-3 text-center text-xs font-black uppercase tracking-[0.16em] text-cyan-800 shadow-sm dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200">Syncing latest hours...</div>}
 
         <SectionNav activeSection={activeSection} setActiveSection={goToSection} isAdmin={currentUser.role === "admin"} />
+        {appLoading && activeSection !== "dashboard" && <AppSkeleton />}
 
         {activeSection === "updates" && <PortalMessages messages={messages} employees={employees} currentUser={currentUser} messageForm={messageForm} setMessageForm={setMessageForm} sendAdminMessage={sendAdminMessage} />}
 
@@ -2004,10 +2348,13 @@ export default function RestorationHoursTracker() {
 
         <main className="grid w-full max-w-full gap-4 overflow-x-hidden xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
           <motion.section {...softMotion} transition={{ ...spring, delay: 0.06 }} className="min-w-0 space-y-4 sm:space-y-5">
+            {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <WeekAtGlance entries={currentWeekEntries} weekDateKeys={currentWeekDates} onOpenDay={openDayDetail} onAddHours={openQuickAddForDate} />}
+            {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <TimeHealthCard missingDays={missingWeekdays} currentWeekHours={currentWeekHours} liveShift={liveShift} onAddHours={openQuickAddForDate} onStopShift={stopLiveShiftAndFillForm} />}
+
             {activeSection === "dashboard" && currentUser.role !== "admin" && !appLoading && <EmployeeTodayPanel
               currentUser={currentUser}
               liveShift={liveShift}
-              elapsed={liveShiftElapsed()}
+              startedAt={liveShift?.startedAt}
               todayEntries={todayEntries}
               weekEntries={currentWeekEntries}
               recentJobs={recentJobNames}
@@ -2269,7 +2616,7 @@ export default function RestorationHoursTracker() {
 
             {["dashboard", "add"].includes(activeSection) && <LiveShiftPanel
               liveShift={liveShift}
-              elapsed={liveShiftElapsed()}
+              startedAt={liveShift?.startedAt}
               startLiveShift={startLiveShift}
               stopLiveShiftAndFillForm={stopLiveShiftAndFillForm}
               form={form}
@@ -2324,6 +2671,8 @@ export default function RestorationHoursTracker() {
           </motion.section>
 
           <motion.aside {...softMotion} transition={{ ...spring, delay: 0.12 }} className="min-w-0 space-y-4 sm:space-y-5">
+            {currentUser.role !== "admin" && activeSection === "dashboard" && <EmployeeActivityTimeline events={auditEvents} currentUser={currentUser} employeeById={employeeById} />}
+
             {currentUser.role === "admin" && activeSection === "dashboard" && <AdminTeamSnapshot
               employees={employees}
               entries={entries}
@@ -2370,6 +2719,8 @@ export default function RestorationHoursTracker() {
               openDayDetail={openDayDetail}
             />}
 
+            {currentUser.role === "admin" && activeSection === "review" && <ApprovalFocusCard entries={pendingApprovalEntries} employeeById={employeeById} onApprove={updateStatus} onDeny={openDenyModal} onEdit={openEditModal} />}
+
             {currentUser.role === "admin" && activeSection === "review" && <AdminApprovalQueue
               approvalGroups={approvalGroups}
               expandedApprovalGroups={expandedApprovalGroups}
@@ -2379,11 +2730,14 @@ export default function RestorationHoursTracker() {
               approvingAll={approvingAll}
               setReviewModal={openDenyModal}
               openEditModal={openEditModal}
+              deleteHoursEntry={deleteHoursEntry}
               setSelectedEmployeeId={setSelectedEmployeeId}
               setActiveSection={goToSection}
               search={search}
               setSearch={setSearch}
             />}
+
+            {currentUser.role === "admin" && activeSection === "history" && <AuditTrailPanel events={auditEvents} employeeById={employeeById} currentUser={currentUser} />}
 
             {(activeSection === "dashboard" || (activeSection === "review" && currentUser.role !== "admin")) && <Card>
               <CardContent>
@@ -2412,7 +2766,7 @@ export default function RestorationHoursTracker() {
                         <div className="mb-3 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="clean-wrap text-sm font-black leading-snug">{entry.customerName}</p><p className="clean-wrap text-xs font-bold leading-snug text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="clean-wrap text-xs leading-snug text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
                         <EntryDetails entry={entry} employee={employee} />
                         {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
-                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-1 gap-2 rounded-2xl sm:grid-cols-3 border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button></div>}
+                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-2 gap-2 rounded-[1.35rem] border border-slate-100 bg-slate-50/80 p-2.5 sm:grid-cols-4 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit / Move</Button><Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10" onClick={() => deleteHoursEntry(entry)}><Trash2 className="mr-1 h-3.5 w-3.5" /> Delete</Button></div>}
                       </div>
                     );
                   })}
@@ -2432,7 +2786,7 @@ export default function RestorationHoursTracker() {
       {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} activeJobs={activeJobs} jobs={jobs} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
-      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} setReviewModal={openDenyModal} openQuickAddForDate={openQuickAddForDate} />}
+      {dayDetail && <DayDetailModal dayDetail={dayDetail} setDayDetail={setDayDetail} currentUser={currentUser} employeeById={employeeById} updateStatus={updateStatus} openEditModal={openEditModal} deleteHoursEntry={deleteHoursEntry} setReviewModal={openDenyModal} openQuickAddForDate={openQuickAddForDate} />}
       <style>{inputStyles}</style>
     </div>
   );
@@ -2462,10 +2816,29 @@ function CapabilityDock({ installPrompt, installApp, notificationPermission, req
 }
 
 
-function EmployeeTodayPanel({ currentUser, liveShift, elapsed, todayEntries, weekEntries, recentJobs, onStart, onAddHours, onOpenTimesheets }) {
+function LiveElapsed({ startedAt }) {
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!startedAt) return undefined;
+    const timer = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+  if (!startedAt) return "0:00:00";
+  const diff = Math.max(0, Math.floor((tick - new Date(startedAt).getTime()) / 1000));
+  const hours = Math.floor(diff / 3600);
+  const minutes = Math.floor((diff % 3600) / 60);
+  const seconds = diff % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function EmployeeTodayPanel({ currentUser, liveShift, startedAt, todayEntries, weekEntries, recentJobs, onStart, onAddHours, onOpenTimesheets }) {
   const todayHours = todayEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
   const weekHours = weekEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
   const progress = Math.min(100, (weekHours / 40) * 100);
+  const remainingHours = Math.max(0, 40 - weekHours);
+  const overtimeHours = Math.max(0, weekHours - 40);
+  const workedDays = new Set(weekEntries.filter((entry) => entryHours(entry) > 0).map((entry) => entry.date)).size;
+  const dailyAverage = workedDays ? weekHours / workedDays : 0;
   const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Phoenix", hour: "numeric", hour12: false }).format(new Date()));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   return (
@@ -2479,11 +2852,16 @@ function EmployeeTodayPanel({ currentUser, liveShift, elapsed, todayEntries, wee
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Today</p><p className="mt-1 text-2xl font-black">{todayHours.toFixed(2)}h</p></div>
             <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">This week</p><p className="mt-1 text-2xl font-black">{weekHours.toFixed(2)}h</p></div>
-            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Clock status</p><p className="mt-1 clean-wrap text-base font-black text-cyan-200">{liveShift ? elapsed : "Not clocked in"}</p></div>
+            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Clock status</p><p className="mt-1 clean-wrap text-base font-black text-cyan-200">{liveShift ? <LiveElapsed startedAt={startedAt} /> : "Not clocked in"}</p></div>
           </div>
-          <div className="mt-4 rounded-3xl border border-white/10 bg-white/[0.055] p-4">
+          <div className="mt-4 rounded-[1.6rem] border border-white/10 bg-white/[0.055] p-4">
             <div className="mb-2 flex items-center justify-between gap-3"><span className="text-xs font-black text-slate-300">Weekly progress</span><span className="text-xs font-black text-cyan-200">{weekHours.toFixed(1)} / 40h</span></div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: .7 }} className="h-full rounded-full bg-cyan-400" /></div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: .55 }} className="h-full rounded-full bg-cyan-400" /></div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="rounded-2xl bg-white/[0.06] px-3 py-2"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Remaining</p><p className="mt-0.5 text-sm font-black text-white">{remainingHours.toFixed(1)}h</p></div>
+              <div className="rounded-2xl bg-white/[0.06] px-3 py-2"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Daily avg</p><p className="mt-0.5 text-sm font-black text-white">{dailyAverage.toFixed(1)}h</p></div>
+              <div className="rounded-2xl bg-white/[0.06] px-3 py-2"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Overtime</p><p className="mt-0.5 text-sm font-black text-white">{overtimeHours.toFixed(1)}h</p></div>
+            </div>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             {!liveShift && <Button type="button" variant="cool" onClick={onStart} className="min-h-12"><Fingerprint className="h-4 w-4" /> Start Clock</Button>}
@@ -2514,7 +2892,7 @@ function AdminTeamSnapshot({ employees, entries, liveShift, pendingCount, onRevi
   );
 }
 
-function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFillForm, form }) {
+function LiveShiftPanel({ liveShift, startedAt, startLiveShift, stopLiveShiftAndFillForm, form }) {
   return (
     <Card className="overflow-hidden border-cyan-200/70 bg-gradient-to-br from-white/80 via-slate-50/70 to-cyan-50/50 dark:border-cyan-300/10 dark:from-slate-950/60 dark:via-slate-900/60 dark:to-cyan-950/30">
       <CardContent className="p-4 sm:p-5">
@@ -2525,7 +2903,7 @@ function LiveShiftPanel({ liveShift, elapsed, startLiveShift, stopLiveShiftAndFi
             </div>
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Live clock-in timer</p>
-              <h2 className={cx("font-black tabular-nums tracking-[-0.05em]", liveShift ? "text-4xl sm:text-5xl" : "text-2xl")}>{liveShift ? elapsed : "Ready to work"}</h2>
+              <h2 className={cx("font-black tabular-nums tracking-[-0.05em]", liveShift ? "text-4xl sm:text-5xl" : "text-2xl")}>{liveShift ? <LiveElapsed startedAt={startedAt} /> : "Ready to work"}</h2>
               <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{liveShift ? (liveShift.customerName || form.customerName || "Active job timer") : "Start a timer and it will keep running until you stop and review it."}</p>
             </div>
           </div>
@@ -2546,7 +2924,7 @@ function NextJobModal({ activeJobs = [], onStart, onClose }) {
   const [search, setSearch] = useState("");
   const filteredJobs = activeJobs.filter((job) => `${job.customerName || ""} ${job.jobNumber || ""} ${job.jobType || ""}`.toLowerCase().includes(search.toLowerCase()));
   return (
-    <div className="fixed inset-0 z-[55] flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
+    <div className="native-sheet fixed inset-0 z-[55] flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
       <motion.div initial={{ opacity: 0, y: 22, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[88vh] w-full max-w-xl overflow-auto rounded-[2rem] border border-white/60 bg-slate-50/95 p-5 shadow-2xl dark:border-white/10 dark:bg-slate-950/95">
         <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Previous job submitted</p><h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">Start the next job</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Choose a saved job and the new timer starts immediately.</p></div><Button variant="ghost" onClick={onClose}><X className="h-5 w-5" /></Button></div>
         <div className="relative mt-4"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-11" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search customer, job number, or type…" /></div>
@@ -2568,7 +2946,7 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
     }));
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
+    <div className="native-sheet fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
       <motion.div
         initial={{ opacity: 0, y: 22, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -2703,7 +3081,7 @@ function DocumentationWeek({ title, entries, getName, openDayDetail }) {
   );
 }
 
-function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, updateStatus, openEditModal, setReviewModal, openQuickAddForDate }) {
+function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, updateStatus, openEditModal, deleteHoursEntry, setReviewModal, openQuickAddForDate }) {
   const dayEntries = dayDetail.entries || [];
   const activeEntries = dayEntries.filter((entry) => !isDeniedEntry(entry));
   const deniedEntries = dayEntries.filter((entry) => isDeniedEntry(entry));
@@ -2711,7 +3089,7 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
   const approvedHours = activeEntries.filter((entry) => String(entry.approvalStatus).toLowerCase() === "approved").reduce((sum, entry) => sum + entryHours(entry), 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
+    <div className="native-sheet fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
       <motion.div
         initial={{ opacity: 0, y: 26, scale: 0.965 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -2765,10 +3143,11 @@ function DayDetailModal({ dayDetail, setDayDetail, currentUser, employeeById, up
                 )}
 
                 {currentUser?.role === "admin" && (
-                  <div className="mt-3 grid grid-cols-1 gap-2 rounded-2xl sm:grid-cols-3 border border-slate-100 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5">
+                  <div className="admin-entry-actions mt-3 grid grid-cols-2 gap-2 rounded-[1.35rem] border border-slate-100 bg-slate-50/80 p-2.5 dark:border-white/10 dark:bg-white/5 sm:grid-cols-4">
                     <Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button>
                     <Button size="sm" variant="danger" onClick={() => setReviewModal(entry)}>Deny</Button>
-                    <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit</Button>
+                    <Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit / Move</Button>
+                    <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10" onClick={() => deleteHoursEntry(entry)}><Trash2 className="mr-1 h-3.5 w-3.5" /> Delete</Button>
                   </div>
                 )}
               </div>
@@ -2865,7 +3244,7 @@ function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOp
   }
   const previewUser = { ...currentUser, firstName: profileForm.firstName, lastName: profileForm.lastName, avatarUrl: profileForm.avatarUrl, name: `${profileForm.firstName} ${profileForm.lastName}`.trim() || currentUser.name };
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
+    <div className="native-sheet fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/70 bg-slate-50/95 p-5 shadow-2xl shadow-slate-950/20 ring-1 ring-white/80 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/95 dark:ring-white/10">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
@@ -2933,7 +3312,7 @@ function MiniStat({ label, value, tone }) {
 
 function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
+    <div className="native-sheet fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="w-full max-w-lg rounded-[2rem] border border-white/70 bg-slate-50/92 p-5 shadow-2xl shadow-slate-950/20 ring-1 ring-white/80 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/92 dark:ring-white/10">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-red-600 dark:text-red-300">Private admin review</p><h2 className="mt-1 text-2xl font-black tracking-[-0.03em]">Deny hours?</h2><p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-400">This reason will only be visible to admins and the employee who submitted the entry.</p>
         <div className="mt-4 rounded-3xl bg-white/80 p-4 text-sm shadow-sm dark:bg-white/5"><p className="font-black">{reviewModal.entry.customerName}</p><p className="text-slate-500 dark:text-slate-400">{displayDate(reviewModal.entry.date)} · {entryHours(reviewModal.entry).toFixed(2)} hrs</p></div>
@@ -2946,9 +3325,9 @@ function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError })
 
 function EditHoursModal({ editModal, setEditModal, saveEditedHours }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
+    <div className="native-sheet fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/70 bg-slate-50/92 p-5 shadow-2xl shadow-slate-950/20 ring-1 ring-white/80 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/92 dark:ring-white/10">
-        <div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Admin hour correction</p><h2 className="mt-1 text-2xl font-black tracking-[-0.03em]">Edit employee hours</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">{editModal.employeeName}</p></div><Button variant="ghost" onClick={() => setEditModal(null)}><X className="h-5 w-5" /></Button></div>
+        <div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Admin hour correction</p><h2 className="mt-1 text-2xl font-black tracking-[-0.03em]">Edit / move employee hours</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">{editModal.employeeName}</p></div><Button variant="ghost" onClick={() => setEditModal(null)}><X className="h-5 w-5" /></Button></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Date"><input type="date" value={editModal.date} onChange={(e) => setEditModal({ ...editModal, date: e.target.value })} className="input" /></Field>
           <Field label="Job Type"><select value={editModal.jobType} onChange={(e) => setEditModal({ ...editModal, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
@@ -2959,7 +3338,7 @@ function EditHoursModal({ editModal, setEditModal, saveEditedHours }) {
           <Field label="Lunch Minutes"><input type="number" min="0" value={editModal.lunchMinutes} disabled={!editModal.lunchTaken} onChange={(e) => setEditModal({ ...editModal, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
           <div className="sm:col-span-2"><Field label="Admin Notes / Correction Reason"><textarea value={editModal.notes} onChange={(e) => setEditModal({ ...editModal, notes: e.target.value })} className="input min-h-28 resize-none" /></Field></div>
         </div>
-        <div className="mt-4 rounded-3xl bg-slate-900 p-4 text-white dark:bg-white/10"><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Corrected Total</p><p className="text-2xl font-black">{entryHours(editModal).toFixed(2)} hrs</p><p className="mt-1 text-xs font-bold text-slate-300">Saving edits returns this entry to pending so it can be reviewed again.</p></div>
+        <div className="mt-4 rounded-3xl bg-slate-900 p-4 text-white dark:bg-white/10"><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Corrected Total</p><p className="text-2xl font-black">{entryHours(editModal).toFixed(2)} hrs</p><p className="mt-1 text-xs font-bold text-slate-300">Change the date to move these hours to another day. Saving returns the entry to pending review.</p></div>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button variant="outline" onClick={() => setEditModal(null)} className="flex-1 py-3">Cancel</Button><Button variant="cool" onClick={saveEditedHours} className="flex-1 py-3"><Edit3 className="mr-2 h-4 w-4" /> Save Changes</Button></div>
       </motion.div>
     </div>
