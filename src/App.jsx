@@ -816,7 +816,6 @@ function AdminControlCenter({
             <h2 className="text-xl font-black tracking-[-0.04em] sm:text-2xl">Employees & Jobs</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Manage hours access, roles, active employees, and job records from inside the app.</p>
           </div>
-          <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-black text-cyan-700 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200">Feature Pack 1</div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_0.95fr]">
@@ -922,6 +921,8 @@ export default function RestorationHoursTracker() {
   const [liveShift, setLiveShift] = useState(() => {
     try { return JSON.parse(localStorage.getItem("vodaLiveShift") || "null"); } catch { return null; }
   });
+  const [teamLiveShifts, setTeamLiveShifts] = useState([]);
+  const [liveShiftSyncAvailable, setLiveShiftSyncAvailable] = useState(true);
   const [stoppedShiftReview, setStoppedShiftReview] = useState(null);
   const [showSplash, setShowSplash] = useState(true);
   const [isPhotoUploading, setIsPhotoUploading] = useState(false);
@@ -1085,6 +1086,37 @@ export default function RestorationHoursTracker() {
   }, [currentUser?.id, currentUser?.role]);
 
   useEffect(() => {
+    if (currentUser?.role !== "admin") return undefined;
+    const channel = supabase
+      .channel(`voda-live-shifts-${currentUser.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "live_shifts" }, (payload) => {
+        if (payload.eventType === "DELETE") {
+          const employeeId = payload.old?.employee_id;
+          if (employeeId) setTeamLiveShifts((current) => current.filter((shift) => shift.employeeId !== employeeId));
+          return;
+        }
+        if (!payload.new?.employee_id) return;
+        const normalized = {
+          employeeId: payload.new.employee_id,
+          startedAt: payload.new.started_at,
+          date: payload.new.work_date,
+          jobId: payload.new.job_id || null,
+          jobType: payload.new.job_type || "Other",
+          customerName: payload.new.customer_name || "Current shift",
+          updatedAt: payload.new.updated_at,
+        };
+        setTeamLiveShifts((current) => {
+          const exists = current.some((shift) => shift.employeeId === normalized.employeeId);
+          return exists ? current.map((shift) => shift.employeeId === normalized.employeeId ? normalized : shift) : [...current, normalized];
+        });
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") setLiveShiftSyncAvailable(true);
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser?.id, currentUser?.role]);
+
+  useEffect(() => {
     const handleBeforeInstallPrompt = (event) => {
       event.preventDefault();
       setInstallPrompt(event);
@@ -1222,7 +1254,7 @@ export default function RestorationHoursTracker() {
 
     const isAdmin = currentUser?.role === "admin";
     const profilesQuery = isAdmin
-      ? supabase.from("profiles").select("id, full_name, first_name, last_name, phone, avatar_url, role").order("full_name", { ascending: true })
+      ? supabase.from("profiles").select("id, full_name, first_name, last_name, phone, avatar_url, role, active, hourly_rate").order("full_name", { ascending: true })
       : Promise.resolve({ data: [{ id: currentUser.id, full_name: currentUser.name, first_name: currentUser.firstName, last_name: currentUser.lastName, phone: currentUser.phone, avatar_url: currentUser.avatarUrl, role: currentUser.role }], error: null });
     const entriesQuery = isAdmin
       ? supabase.from("time_entries").select("*").order("work_date", { ascending: false })
@@ -1270,6 +1302,28 @@ export default function RestorationHoursTracker() {
       if (!data?.length) return;
       setAuditEvents(data.map((event) => ({ id: event.id, action: event.action, label: event.label || event.action, detail: event.detail || "", employeeId: event.employee_id, entryId: event.entry_id, createdAt: event.created_at, actorId: event.actor_id })));
     }).catch(() => {});
+
+    if (isAdmin) {
+      supabase.from("live_shifts").select("*").order("started_at", { ascending: true }).then(({ data, error }) => {
+        if (error) {
+          setLiveShiftSyncAvailable(false);
+          setTeamLiveShifts([]);
+          return;
+        }
+        setLiveShiftSyncAvailable(true);
+        setTeamLiveShifts((data || []).map((shift) => ({
+          employeeId: shift.employee_id,
+          startedAt: shift.started_at,
+          date: shift.work_date,
+          jobId: shift.job_id || null,
+          jobType: shift.job_type || "Other",
+          customerName: shift.customer_name || "Current shift",
+          updatedAt: shift.updated_at,
+        })));
+      }).catch(() => { setLiveShiftSyncAvailable(false); setTeamLiveShifts([]); });
+    } else {
+      setTeamLiveShifts([]);
+    }
     setAppLoading(false);
   }
 
@@ -1493,6 +1547,26 @@ export default function RestorationHoursTracker() {
     notifyUser("Password updated", "Your VODA portal password was changed successfully.");
   }
 
+  async function syncLiveShiftStart(shift) {
+    if (!currentUser?.id || !navigator.onLine) return;
+    const { error } = await supabase.from("live_shifts").upsert({
+      employee_id: currentUser.id,
+      started_at: shift.startedAt,
+      work_date: shift.date,
+      job_id: shift.jobId ? String(shift.jobId) : null,
+      job_type: shift.jobType || "Other",
+      customer_name: shift.customerName || "Current shift",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "employee_id" });
+    if (error) setLiveShiftSyncAvailable(false);
+  }
+
+  async function syncLiveShiftStop() {
+    if (!currentUser?.id || !navigator.onLine) return;
+    const { error } = await supabase.from("live_shifts").delete().eq("employee_id", currentUser.id);
+    if (error) setLiveShiftSyncAvailable(false);
+  }
+
   function beginLiveShiftForJob(job = null) {
     const startedAt = new Date();
     const nextForm = {
@@ -1510,13 +1584,15 @@ export default function RestorationHoursTracker() {
       lunchMinutes: 0,
     };
     setForm(nextForm);
-    setLiveShift({
+    const nextShift = {
       startedAt: startedAt.toISOString(),
       date: nextForm.date,
       jobId: nextForm.jobId,
       jobType: nextForm.jobType,
       customerName: nextForm.customerName,
-    });
+    };
+    setLiveShift(nextShift);
+    syncLiveShiftStart(nextShift).catch(() => setLiveShiftSyncAvailable(false));
     setNextJobOpen(false);
   }
 
@@ -1548,6 +1624,7 @@ export default function RestorationHoursTracker() {
     setDayDetail(null);
     setStoppedShiftReview(reviewEntry);
     setForm((current) => ({ ...current, ...reviewEntry }));
+    syncLiveShiftStop().catch(() => setLiveShiftSyncAvailable(false));
     setLiveShift(null);
   }
 
@@ -2606,32 +2683,17 @@ export default function RestorationHoursTracker() {
           <motion.aside {...softMotion} transition={{ ...spring, delay: 0.12 }} className="min-w-0 space-y-4 sm:space-y-5">
             {currentUser.role !== "admin" && activeSection === "dashboard" && <EmployeeActivityTimeline events={auditEvents} currentUser={currentUser} employeeById={employeeById} />}
 
-            {currentUser.role === "admin" && activeSection === "dashboard" && <AdminTeamSnapshot
+            {currentUser.role === "admin" && activeSection === "dashboard" && <ManagerDashboard
               employees={employees}
               entries={entries}
-              liveShift={liveShift}
+              activeJobs={activeJobs}
+              liveShifts={teamLiveShifts}
+              liveShiftSyncAvailable={liveShiftSyncAvailable}
               pendingCount={pendingCount}
               onReview={() => goToSection("review")}
               onHistory={() => goToSection("history")}
+              onManage={() => goToSection("manage")}
             />}
-
-            {currentUser.role === "admin" && activeSection === "dashboard" && (
-              <Card>
-                <CardContent>
-                  <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Command Center</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">Payroll + Team Controls</h2></div><Sparkles className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <MiniStat label="Approved" value={`${approvedPayrollTotal.toFixed(2)}h`} tone="emerald" />
-                    <MiniStat label="Pending" value={pendingCount} tone="amber" />
-                    <MiniStat label="Denied" value={`${deniedHoursTotal.toFixed(2)}h`} tone="red" />
-                  </div>
-                  <div className="mt-4 rounded-3xl border border-white/70 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
-                    <div className="mb-3 flex items-center gap-2"><Users className="h-4 w-4 text-cyan-700 dark:text-cyan-300" /><p className="text-sm font-black">Employee Invite Helper</p></div>
-                    <div className="flex flex-col gap-2 sm:flex-row"><input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="input" placeholder="employee@email.com" /><Button type="button" onClick={createInviteDraft}>Prepare</Button></div>
-                    {inviteNote && <p className="mt-3 rounded-2xl bg-cyan-50 p-3 text-xs font-bold text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{inviteNote}</p>}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {activeSection === "exports" && <DocumentationExportPanel
               currentUser={currentUser}
@@ -2824,18 +2886,86 @@ function EmployeeTodayPanel({ currentUser, liveShift, startedAt, todayEntries, w
   );
 }
 
-function AdminTeamSnapshot({ employees, entries, liveShift, pendingCount, onReview, onHistory }) {
-  const todayKey = phoenixDateKey();
-  const todayEntries = entries.filter((entry) => entry.date === todayKey);
-  const activeEmployees = new Set(todayEntries.map((entry) => entry.employeeId)).size + (liveShift ? 1 : 0);
+function ManagerDashboard({ employees, entries, activeJobs, liveShifts, liveShiftSyncAvailable, pendingCount, onReview, onHistory, onManage }) {
+  const now = new Date();
+  const todayKey = phoenixDateKey(now);
+  const weekStartKey = formatDate(getMonday(phoenixDateKeyToDate(todayKey)));
+  const weekKeys = Array.from({ length: 7 }, (_, index) => formatDate(addDays(phoenixDateKeyToDate(weekStartKey), index)));
+  const activeEmployees = employees.filter((employee) => employee.active !== false && employee.role !== "admin");
+  const todayEntries = entries.filter((entry) => entry.date === todayKey && !isDeniedEntry(entry));
   const todayHours = todayEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+  const currentParts = phoenixClockParts(now);
+  const weekday = currentParts.weekday;
+  const currentMinutes = Number(currentParts.hour || 0) * 60 + Number(currentParts.minute || 0);
+  const shouldFlagMissing = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday) && currentMinutes >= (8 * 60 + 30);
+  const freshLiveShifts = liveShifts.filter((shift) => {
+    const startedAt = new Date(shift.startedAt).getTime();
+    return Number.isFinite(startedAt) && (Date.now() - startedAt) < 16 * 60 * 60 * 1000;
+  });
+  const liveEmployeeIds = new Set(freshLiveShifts.map((shift) => shift.employeeId));
+  const todayEmployeeIds = new Set(todayEntries.map((entry) => entry.employeeId));
+  const noActivityEmployees = shouldFlagMissing ? activeEmployees.filter((employee) => !liveEmployeeIds.has(employee.id) && !todayEmployeeIds.has(employee.id)) : [];
+  const weeklyByEmployee = activeEmployees.map((employee) => {
+    const hours = entries
+      .filter((entry) => entry.employeeId === employee.id && weekKeys.includes(entry.date) && !isDeniedEntry(entry))
+      .reduce((sum, entry) => sum + entryHours(entry), 0);
+    return { ...employee, hours };
+  });
+  const overtimeAttention = weeklyByEmployee.filter((employee) => employee.hours >= 35).sort((a, b) => b.hours - a.hours);
+
   return (
-    <Card>
-      <CardContent>
-        <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Team Today</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">At-a-glance operations</h2></div><Activity className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
-        <div className="mt-4 grid grid-cols-3 gap-2"><MiniStat label="Active" value={activeEmployees} tone="cyan" /><MiniStat label="Today" value={`${todayHours.toFixed(1)}h`} tone="emerald" /><MiniStat label="Pending" value={pendingCount} tone="amber" /></div>
-        <div className="mt-4 grid grid-cols-2 gap-2"><Button variant="cool" onClick={onReview}>Review Hours</Button><Button variant="outline" onClick={onHistory}>View History</Button></div>
-        <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">{employees.filter((employee) => employee.active !== false).length} active employee profiles.</p>
+    <Card className="manager-dashboard-card">
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300">Manager Dashboard</p>
+            <h2 className="mt-1 truncate text-lg font-black tracking-[-0.035em] sm:text-xl">Today at Voda</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Fast operational status without opening multiple screens.</p>
+          </div>
+          <ShieldCheck className="h-5 w-5 shrink-0 text-cyan-700 dark:text-cyan-300" />
+        </div>
+
+        <div className="manager-metric-grid mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <MiniStat label="Clocked in" value={freshLiveShifts.length} tone="cyan" />
+          <MiniStat label="Active jobs" value={activeJobs.length} tone="cyan" />
+          <MiniStat label="Labor today" value={`${todayHours.toFixed(1)}h`} tone="emerald" />
+          <MiniStat label="35h+" value={overtimeAttention.length} tone="amber" />
+          <MiniStat label="Review" value={pendingCount} tone="amber" />
+          <MiniStat label="No activity" value={noActivityEmployees.length} tone={noActivityEmployees.length ? "red" : "emerald"} />
+        </div>
+
+        <div className="mt-3 space-y-2">
+          <details className="manager-disclosure rounded-[1.15rem] border border-slate-200/75 bg-white/70 dark:border-white/10 dark:bg-white/[0.055]" open={freshLiveShifts.length > 0}>
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-2.5 text-sm font-black">
+              <span className="flex min-w-0 items-center gap-2"><span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" /><span className="truncate">Employees clocked in</span></span>
+              <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{freshLiveShifts.length}</span>
+            </summary>
+            <div className="border-t border-slate-200/70 px-3.5 py-2.5 dark:border-white/10">
+              {freshLiveShifts.length ? <div className="space-y-2">{freshLiveShifts.map((shift) => {
+                const employee = employees.find((person) => person.id === shift.employeeId);
+                const elapsed = Math.max(0, (Date.now() - new Date(shift.startedAt).getTime()) / 36e5);
+                return <div key={shift.employeeId} className="flex min-w-0 items-center justify-between gap-3 text-xs"><div className="min-w-0"><p className="truncate font-black text-slate-900 dark:text-white">{employee?.name || "Employee"}</p><p className="truncate font-semibold text-slate-500 dark:text-slate-400">{shift.customerName || shift.jobType || "Current shift"}</p></div><span className="shrink-0 whitespace-nowrap font-black tabular-nums text-cyan-700 dark:text-cyan-300">{elapsed.toFixed(1)}h</span></div>;
+              })}</div> : <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{liveShiftSyncAvailable ? "No employees are currently clocked in." : "Run the included live-shift Supabase upgrade to enable team clock-in visibility."}</p>}
+            </div>
+          </details>
+
+          {(overtimeAttention.length > 0 || noActivityEmployees.length > 0) && <details className="manager-disclosure rounded-[1.15rem] border border-slate-200/75 bg-white/70 dark:border-white/10 dark:bg-white/[0.055]">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-2.5 text-sm font-black">
+              <span className="flex min-w-0 items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0 text-amber-500" /><span className="truncate">Needs attention</span></span>
+              <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{overtimeAttention.length + noActivityEmployees.length}</span>
+            </summary>
+            <div className="space-y-2 border-t border-slate-200/70 px-3.5 py-2.5 dark:border-white/10">
+              {overtimeAttention.map((employee) => <div key={`ot-${employee.id}`} className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{employee.name}</span><span className="shrink-0 whitespace-nowrap font-black text-amber-600 dark:text-amber-300">{employee.hours.toFixed(1)}h this week</span></div>)}
+              {noActivityEmployees.map((employee) => <div key={`missing-${employee.id}`} className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{employee.name}</span><span className="shrink-0 whitespace-nowrap font-black text-red-600 dark:text-red-300">No activity today</span></div>)}
+            </div>
+          </details>}
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Button size="sm" variant="cool" onClick={onReview}>Review</Button>
+          <Button size="sm" variant="outline" onClick={onManage}>Manage</Button>
+          <Button size="sm" variant="outline" onClick={onHistory}>History</Button>
+        </div>
       </CardContent>
     </Card>
   );

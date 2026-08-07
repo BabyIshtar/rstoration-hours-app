@@ -13,7 +13,8 @@
     "cap:add:android": "npm run build && npx cap add android",
     "cap:sync": "npm run build && npx cap sync",
     "cap:open:ios": "npx cap open ios",
-    "cap:open:android": "npx cap open android"
+    "cap:open:android": "npx cap open android",
+    "qa": "node scripts/qa-static.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",

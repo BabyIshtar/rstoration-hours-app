@@ -1204,3 +1204,23 @@ header button span {
   .light .today-panel .today-stat { background:#f5f8fa !important; }
   .light .today-panel [class*="bg-white/75"] { background:#fff !important; }
 }
+
+/* VODA Time RC4 — compact manager dashboard */
+.manager-dashboard-card { overflow:hidden; }
+.manager-dashboard-card .manager-metric-grid { min-width:0; }
+.manager-disclosure summary::-webkit-details-marker { display:none; }
+.manager-disclosure summary::marker { content:""; }
+.manager-disclosure[open] summary { border-bottom-left-radius:0; border-bottom-right-radius:0; }
+.light .manager-dashboard-card,
+.light .manager-disclosure {
+  background:rgba(255,255,255,.96) !important;
+  color:var(--voda-light-text) !important;
+  border-color:var(--voda-light-border) !important;
+}
+@media (max-width:640px) {
+  .manager-dashboard-card > div { padding:.8rem !important; }
+  .manager-dashboard-card .manager-metric-grid { gap:4px !important; }
+  .manager-dashboard-card .mini-stat { min-height:54px !important; }
+  .manager-disclosure summary { min-height:44px !important; padding:.55rem .7rem !important; }
+  .manager-disclosure > div { padding:.6rem .7rem !important; }
+}
