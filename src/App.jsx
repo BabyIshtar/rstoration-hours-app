@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Camera,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -253,6 +254,15 @@ function displayShortDate(value) {
   const month = getPhoenixPart(date, "month", { month: "short", day: "numeric" });
   const day = Number(getPhoenixPart(date, "day", { month: "short", day: "numeric" }));
   return `${month} ${day}${ordinalSuffix(day)}`;
+}
+
+function displayCalendarDate(value) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : phoenixDateKeyToDate(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  const month = getPhoenixPart(date, "month", { month: "short", day: "numeric" });
+  const day = Number(getPhoenixPart(date, "day", { month: "short", day: "numeric" }));
+  return `${month} ${day}`;
 }
 
 
@@ -930,6 +940,7 @@ export default function RestorationHoursTracker() {
   const [historyMonth, setHistoryMonth] = useState(getMonthStart(new Date()));
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("all");
   const [search, setSearch] = useState("");
+  const [entriesOpen, setEntriesOpen] = useState(false);
   const [reviewModal, setReviewModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [dayDetail, setDayDetail] = useState(null);
@@ -2341,38 +2352,38 @@ export default function RestorationHoursTracker() {
               <MetricCard icon={<FileText />} label="Entries" value={visibleEntries.length} />
             </div>}
 
-            <Card className={cx("pay-period-shell overflow-hidden rounded-[1.55rem] border border-white/10 bg-slate-950 text-white shadow-xl shadow-slate-950/20 dark:border-white/10", !["dashboard", "timesheets"].includes(activeSection) && "hidden")}>
+            <Card className={cx("pay-period-shell overflow-hidden rounded-[1.55rem] border border-slate-200/70 bg-white/88 text-slate-950 shadow-xl shadow-slate-950/8 dark:border-white/10 dark:bg-slate-950 dark:text-white dark:shadow-slate-950/20", !["dashboard", "timesheets"].includes(activeSection) && "hidden")}>
               <CardContent className="p-0">
-                <div className="relative overflow-hidden rounded-[1.55rem] bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.18),transparent_28%),linear-gradient(135deg,#111827,#1f2937_52%,#0f172a)]">
-                  <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(255,255,255,.08),transparent_34%)]" />
-                  <img src={iconLogo} alt="" aria-hidden="true" className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 object-contain opacity-[0.045] brightness-0 invert sm:h-40 sm:w-40" />
+                <div className="relative overflow-hidden rounded-[1.55rem] bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.13),transparent_28%),linear-gradient(135deg,rgba(255,255,255,.96),rgba(241,245,249,.94)_52%,rgba(248,250,252,.98))] dark:bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.18),transparent_28%),linear-gradient(135deg,#111827,#1f2937_52%,#0f172a)]">
+                  <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(255,255,255,.62),transparent_34%)] dark:bg-[linear-gradient(180deg,rgba(255,255,255,.08),transparent_34%)]" />
+                  <img src={iconLogo} alt="" aria-hidden="true" className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 object-contain opacity-[0.035] sm:h-40 sm:w-40 dark:brightness-0 dark:invert" />
 
-                  <div className="relative flex flex-col gap-3 border-b border-white/10 px-3.5 py-4 sm:px-5 sm:py-5 md:flex-row md:items-center md:justify-between">
+                  <div className="relative flex flex-col gap-3 border-b border-slate-200/70 px-3.5 py-4 dark:border-white/10 sm:px-5 sm:py-5 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0">
                       <div className="mb-2 flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.85)]" />
-                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">Pay period</p>
+                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Pay period</p>
                       </div>
-                      <h2 className="text-lg font-black tracking-[-0.04em] text-white sm:text-2xl">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
-                      <p className="mt-1 text-xs font-bold tracking-[-0.01em] text-slate-400 sm:text-sm">Two-Week Timesheet</p>
+                      <h2 className="text-lg font-black tracking-[-0.04em] text-slate-950 sm:text-2xl dark:text-white">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
+                      <p className="mt-1 text-xs font-bold tracking-[-0.01em] text-slate-600 sm:text-sm dark:text-slate-400">Two-Week Timesheet</p>
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
 
                     <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-3">
-                      <Button variant="outline" aria-label="Previous pay period" onClick={() => setWeekStart(addDays(weekStart, -14))} className="h-10 w-10 rounded-[1rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronLeft className="h-5 w-5" /></Button>
-                      <Button variant="outline" aria-label="Next pay period" onClick={() => setWeekStart(addDays(weekStart, 14))} className="h-10 w-10 rounded-[1rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronRight className="h-5 w-5" /></Button>
+                      <Button variant="outline" aria-label="Previous pay period" onClick={() => setWeekStart(addDays(weekStart, -14))} className="h-10 w-10 rounded-[1rem] border-slate-200 bg-white/75 p-0 text-slate-700 hover:bg-white sm:h-14 sm:w-14 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><ChevronLeft className="h-5 w-5" /></Button>
+                      <Button variant="outline" aria-label="Next pay period" onClick={() => setWeekStart(addDays(weekStart, 14))} className="h-10 w-10 rounded-[1rem] border-slate-200 bg-white/75 p-0 text-slate-700 hover:bg-white sm:h-14 sm:w-14 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><ChevronRight className="h-5 w-5" /></Button>
                       <Button variant="cool" onClick={() => exportCsv(false)} className="h-10 gap-1.5 rounded-[1rem] px-3 text-xs sm:h-11 sm:px-4 sm:text-sm"><Download className="h-5 w-5" /> CSV</Button>
-                      <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-10 gap-1.5 rounded-[1rem] border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:h-11 sm:px-4 sm:text-sm"><FileText className="h-5 w-5" /> Notes</Button>
-                      <Button variant="outline" onClick={exportPayrollPdf} className="h-10 gap-1.5 rounded-[1rem] border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:h-11 sm:px-4 sm:text-sm"><FileText className="h-5 w-5" /> PDF</Button>
+                      <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-10 gap-1.5 rounded-[1rem] border-slate-200 bg-white/75 px-3 text-xs text-slate-700 hover:bg-white sm:h-11 sm:px-4 sm:text-sm dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><FileText className="h-5 w-5" /> Notes</Button>
+                      <Button variant="outline" onClick={exportPayrollPdf} className="h-10 gap-1.5 rounded-[1rem] border-slate-200 bg-white/75 px-3 text-xs text-slate-700 hover:bg-white sm:h-11 sm:px-4 sm:text-sm dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><FileText className="h-5 w-5" /> PDF</Button>
                     </div>
                   </div>
 
                   <div className="relative p-3 sm:p-5">
                     {[weekDates, weekTwoDates].map((datesForWeek, weekIndex) => (
                       <div key={weekIndex} className={cx(weekIndex > 0 && "mt-5")}>
-                        <div className="mb-3 flex items-center justify-between rounded-[1.25rem] border border-white/10 bg-white/[0.055] px-4 py-3">
-                          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-200">Week {weekIndex + 1}</p>
-                          <p className="text-xs font-extrabold text-slate-300">{displayShortDate(datesForWeek[0])} – {displayShortDate(datesForWeek[6])}</p>
+                        <div className="week-strip mb-3 flex items-center justify-between rounded-[1.25rem] border border-slate-200/75 bg-slate-50/75 px-4 py-3 dark:border-white/10 dark:bg-white/[0.055]">
+                          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-200">Week {weekIndex + 1}</p>
+                          <p className="week-strip-range whitespace-nowrap text-xs font-extrabold text-slate-600 dark:text-slate-300">{displayShortDate(datesForWeek[0])} – {displayShortDate(datesForWeek[6])}</p>
                         </div>
                         <div className="pay-period-week-grid grid grid-cols-7 gap-1.5 sm:gap-2">
                       {datesForWeek.map((date, index) => {
@@ -2394,7 +2405,7 @@ export default function RestorationHoursTracker() {
                             transition={{ delay: index * 0.03, ...spring }}
                             className={cx(
                               "pay-period-day group relative min-h-[112px] w-full overflow-hidden rounded-[1rem] border px-1.5 py-2 text-center shadow-lg backdrop-blur-xl transition-all duration-300 ease-out sm:min-h-[138px] sm:px-2 sm:py-2.5",
-                              "border-white/15 bg-white/[0.075] hover:-translate-y-0.5 hover:bg-white/[0.105] hover:shadow-2xl hover:shadow-cyan-950/20",
+                              "border-slate-200/80 bg-white/72 hover:-translate-y-0.5 hover:bg-white hover:shadow-xl dark:border-white/15 dark:bg-white/[0.075] dark:hover:bg-white/[0.105] dark:hover:shadow-2xl dark:hover:shadow-cyan-950/20",
                               isToday && "border-cyan-400/90 ring-2 ring-cyan-400/60"
                             )}
                           >
@@ -2405,20 +2416,20 @@ export default function RestorationHoursTracker() {
                             )}
 
                             <div className="flex min-h-[34px] flex-col items-center justify-start gap-0.5 text-center sm:min-h-[42px]">
-                              <p className="text-[10px] font-black uppercase leading-none tracking-[0.04em] text-white sm:text-xs">{shortDay}</p>
-                              <p className="date-compact max-w-full text-[8px] font-bold leading-tight text-slate-400 sm:text-[9px]">{displayShortDate(date)}</p>
+                              <p className="text-[10px] font-black uppercase leading-none tracking-[0.04em] text-slate-900 sm:text-xs dark:text-white">{shortDay}</p>
+                              <p className="date-compact max-w-full text-[8px] font-bold leading-tight text-slate-500 sm:text-[9px] dark:text-slate-400">{displayCalendarDate(date)}</p>
                             </div>
 
-                            <div className="my-1.5 h-px w-full bg-white/10 sm:my-2" />
+                            <div className="my-1.5 h-px w-full bg-slate-200/80 sm:my-2 dark:bg-white/10" />
 
                             <div className="flex h-[34px] items-center justify-center sm:h-[42px]">
-                              <p className="text-[15px] font-black leading-none tracking-[-0.04em] text-cyan-300 sm:text-lg">{total.toFixed(1)}h</p>
+                              <p className="day-hours-value whitespace-nowrap text-[13px] font-black leading-none tracking-[-0.05em] text-cyan-700 sm:text-lg dark:text-cyan-300">{total.toFixed(1)}h</p>
                             </div>
 
                             <div className="mt-1 flex min-h-[20px] items-center justify-center gap-1 sm:mt-2">
-                              {dayEntries.length === 0 ? <span className="text-[8px] font-bold text-slate-500 sm:text-[9px]">Empty</span> : <>
+                              {dayEntries.length === 0 ? <span className="text-[8px] font-bold text-slate-500 sm:text-[9px] dark:text-slate-500">Empty</span> : <>
                                 <span className={cx("h-1.5 w-1.5 rounded-full", deniedCount ? "bg-red-300" : activeEntries.some(isPendingEntry) ? "bg-amber-300" : "bg-emerald-300")} />
-                                <span className="text-[8px] font-black text-slate-400 sm:text-[9px]">{dayEntries.length}</span>
+                                <span className="text-[8px] font-black text-slate-500 sm:text-[9px] dark:text-slate-400">{dayEntries.length}</span>
                               </>}
                             </div>
                           </motion.button>
@@ -2428,13 +2439,13 @@ export default function RestorationHoursTracker() {
                       </div>
                     ))}
 
-                    <div className="mt-2.5 rounded-[1rem] border border-cyan-300/12 bg-cyan-300/[0.045] p-2.5 text-white sm:p-3">
+                    <div className="payroll-summary-panel mt-2.5 rounded-[1rem] border border-cyan-700/10 bg-cyan-50/55 p-2.5 text-slate-950 sm:p-3 dark:border-cyan-300/12 dark:bg-cyan-300/[0.045] dark:text-white">
                       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">Payroll Summary</p>
+                          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-200">Payroll Summary</p>
                           <h3 className="text-base font-black tracking-[-0.025em] sm:text-lg">Two-week totals</h3>
                         </div>
-                        <p className="text-xs font-bold text-slate-300">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
+                        <p className="whitespace-nowrap text-xs font-bold text-slate-600 dark:text-slate-300">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
                       </div>
                       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6 sm:gap-2">
                         <MiniStat label="Week 1" value={`${weekOneSummary.totalHours.toFixed(2)}h`} tone="cyan" />
@@ -2661,38 +2672,55 @@ export default function RestorationHoursTracker() {
 
             {currentUser.role === "admin" && activeSection === "history" && <AuditTrailPanel events={auditEvents} employeeById={employeeById} currentUser={currentUser} />}
 
-            {activeSection === "review" && currentUser.role !== "admin" && <Card>
+            {activeSection === "review" && currentUser.role !== "admin" && <Card className="entries-collapsible">
               <CardContent>
-                <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Transparency Log</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">All Visible Entries</h2></div><CalendarDays className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
-                <div className="mb-4 grid gap-3 md:grid-cols-2">
-                  {currentUser.role === "admin" && <select value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="input"><option value="all">All employees</option>{employees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>}
-                  <div className="relative md:col-span-2"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search jobs or notes..." /></div>
-                </div>
-
-                {currentUser.role === "admin" && (
-                  <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                    {employeeSummaries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm font-bold text-slate-500 sm:col-span-2 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No employee hours to review for this pay period.</div> : employeeSummaries.map((employee) => (
-                      <button key={employee.id} type="button" onClick={() => setSelectedEmployeeId(employee.id)} className="rounded-3xl border border-white/70 bg-white/75 p-4 text-left shadow-sm ring-1 ring-white/70 transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
-                        <p className="text-sm font-black">{employee.name}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">Total: {employee.totalHours.toFixed(2)} hrs</p>
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-black"><span className="rounded-2xl bg-amber-50 px-2 py-2 text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">{employee.pendingCount} pending</span><span className="rounded-2xl bg-emerald-50 px-2 py-2 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">{employee.approvedHours.toFixed(1)} approved</span><span className="rounded-2xl bg-red-100 px-2 py-2 text-red-800 shadow-sm dark:bg-red-500/20 dark:text-red-100">{employee.deniedHours.toFixed(1)} denied</span></div>
-                      </button>
-                    ))}
+                <button
+                  type="button"
+                  className="entries-dropdown-trigger flex w-full items-center justify-between gap-3 rounded-[1.1rem] border border-slate-200/75 bg-white/72 px-4 py-3.5 text-left shadow-sm dark:border-white/10 dark:bg-white/5"
+                  onClick={() => setEntriesOpen((value) => !value)}
+                  aria-expanded={entriesOpen}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Entries</p>
+                    <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
+                      <h2 className="truncate text-base font-black tracking-[-0.03em] sm:text-lg">All Visible Entries</h2>
+                      <span className="shrink-0 text-xs font-bold text-slate-500 dark:text-slate-400">{visibleEntries.length}</span>
+                    </div>
                   </div>
-                )}
+                  <ChevronDown className={cx("h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 dark:text-slate-300", entriesOpen && "rotate-180")} />
+                </button>
 
-                <div className="space-y-3">
-                  {visibleEntries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No matching entries for this pay period.</div> : visibleEntries.map((entry) => {
-                    const employee = entry.employeeId === currentUser.id ? currentUser : employeeById.get(entry.employeeId);
-                    return (
-                      <div key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm transition duration-300 dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "border-slate-200 bg-slate-100/70 opacity-45 grayscale shadow-none dark:bg-white/5")}>
-                        <div className="mb-3 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="clean-wrap text-sm font-black leading-snug">{entry.customerName}</p><p className="clean-wrap text-xs font-bold leading-snug text-cyan-700 dark:text-cyan-300">{entry.jobType}</p><p className="clean-wrap text-xs leading-snug text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end}</p></div><StatusPill status={entry.approvalStatus} /></div>
-                        <EntryDetails entry={entry} employee={employee} />
-                        {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
-                        {currentUser.role === "admin" && <div className="mt-3 grid grid-cols-2 gap-2 rounded-[1.35rem] border border-slate-100 bg-slate-50/80 p-2.5 sm:grid-cols-4 dark:border-white/10 dark:bg-white/5"><Button size="sm" variant="success" onClick={() => updateStatus(entry.id, "approved")}>Approve</Button><Button size="sm" variant="danger" onClick={() => openDenyModal(entry)}>Deny</Button><Button size="sm" variant="outline" onClick={() => openEditModal(entry)}><Edit3 className="mr-1 h-3.5 w-3.5" /> Edit / Move</Button><Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10" onClick={() => deleteHoursEntry(entry)}><Trash2 className="mr-1 h-3.5 w-3.5" /> Delete</Button></div>}
+                <AnimatePresence initial={false}>
+                  {entriesOpen && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .22, ease: [0.22,1,0.36,1] }} className="overflow-hidden">
+                      <div className="pt-3">
+                        <div className="mb-3 relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search jobs or notes..." /></div>
+                        <div className="space-y-2.5">
+                          {visibleEntries.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No matching entries for this pay period.</div> : visibleEntries.map((entry) => {
+                            const employee = entry.employeeId === currentUser.id ? currentUser : employeeById.get(entry.employeeId);
+                            return (
+                              <div key={entry.id} className={cx("entry-compact-card rounded-[1.1rem] border border-slate-200/75 bg-white/78 p-3.5 shadow-sm transition dark:border-white/10 dark:bg-white/[0.045]", isDeniedEntry(entry) && "opacity-50 grayscale")}>
+                                <div className="flex min-w-0 items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-black">{entry.customerName}</p>
+                                    <p className="truncate text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType}</p>
+                                    <p className="mt-0.5 whitespace-nowrap text-[11px] font-semibold text-slate-500 dark:text-slate-400">{displayShortDate(new Date(`${entry.date}T12:00:00`))} · {entry.start}–{entry.end}</p>
+                                  </div>
+                                  <StatusPill status={entry.approvalStatus} />
+                                </div>
+                                <details className="entry-details-disclosure mt-3">
+                                  <summary className="cursor-pointer list-none text-xs font-black text-slate-600 dark:text-slate-300">View details</summary>
+                                  <div className="mt-3"><EntryDetails entry={entry} employee={employee} /></div>
+                                  {(entry.photoUrl || entry.employeeSignature) && <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">{entry.photoUrl && <a className="text-cyan-700 underline dark:text-cyan-300" href={entry.photoUrl} target="_blank" rel="noreferrer">View photo/job documentation</a>}{entry.employeeSignature && <p className="flex items-center gap-2"><PenLine className="h-3.5 w-3.5" /> Signed: {entry.employeeSignature}</p>}</div>}
+                                </details>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </CardContent>
             </Card>}
 
@@ -2763,33 +2791,33 @@ function EmployeeTodayPanel({ currentUser, liveShift, startedAt, todayEntries, w
   const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Phoenix", hour: "numeric", hour12: false }).format(new Date()));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   return (
-    <Card className="overflow-hidden border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/20">
+    <Card className="today-panel overflow-hidden border-slate-200/70 bg-white/90 text-slate-950 shadow-xl shadow-slate-950/8 dark:border-white/10 dark:bg-slate-950 dark:text-white dark:shadow-2xl dark:shadow-slate-950/20">
       <CardContent className="relative p-5 sm:p-6">
         <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-cyan-400/20 blur-3xl" />
         <div className="relative">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">Today at VODA</p>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Today at VODA</p>
           <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">{greeting}, {currentUser?.firstName || String(currentUser?.name || "Team").split(" ")[0]}</h2>
-          <p className="mt-2 text-sm font-semibold text-slate-300">Your current shift, today’s work, and fastest next actions are all here.</p>
+          <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Your current shift, today’s work, and fastest next actions are all here.</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Today</p><p className="mt-1 text-2xl font-black">{todayHours.toFixed(2)}h</p></div>
-            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">This week</p><p className="mt-1 text-2xl font-black">{weekHours.toFixed(2)}h</p></div>
-            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Clock status</p><p className="mt-1 clean-wrap text-base font-black text-cyan-200">{liveShift ? <LiveElapsed startedAt={startedAt} /> : "Not clocked in"}</p></div>
+            <div className="today-stat rounded-3xl border border-slate-200/75 bg-slate-50/78 p-4 dark:border-white/10 dark:bg-white/[0.07]"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Today</p><p className="mt-1 text-2xl font-black">{todayHours.toFixed(2)}h</p></div>
+            <div className="today-stat rounded-3xl border border-slate-200/75 bg-slate-50/78 p-4 dark:border-white/10 dark:bg-white/[0.07]"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">This week</p><p className="mt-1 text-2xl font-black">{weekHours.toFixed(2)}h</p></div>
+            <div className="today-stat rounded-3xl border border-slate-200/75 bg-slate-50/78 p-4 dark:border-white/10 dark:bg-white/[0.07]"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Clock status</p><p className="mt-1 clean-wrap text-base font-black text-cyan-700 dark:text-cyan-200">{liveShift ? <LiveElapsed startedAt={startedAt} /> : "Not clocked in"}</p></div>
           </div>
-          <div className="mt-4 rounded-[1.6rem] border border-white/10 bg-white/[0.055] p-4">
-            <div className="mb-2 flex items-center justify-between gap-3"><span className="text-xs font-black text-slate-300">Weekly progress</span><span className="text-xs font-black text-cyan-200">{weekHours.toFixed(1)} / 40h</span></div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: .55 }} className="h-full rounded-full bg-cyan-400" /></div>
+          <div className="mt-4 rounded-[1.6rem] border border-slate-200/75 bg-slate-50/72 p-4 dark:border-white/10 dark:bg-white/[0.055]">
+            <div className="mb-2 flex items-center justify-between gap-3"><span className="text-xs font-black text-slate-600 dark:text-slate-300">Weekly progress</span><span className="text-xs font-black text-cyan-700 dark:text-cyan-200">{weekHours.toFixed(1)} / 40h</span></div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-slate-200/90 dark:bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: .55 }} className="h-full rounded-full bg-cyan-400" /></div>
             <div className="mt-3 grid grid-cols-3 gap-2">
-              <div className="rounded-2xl bg-white/[0.06] px-3 py-2"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Remaining</p><p className="mt-0.5 text-sm font-black text-white">{remainingHours.toFixed(1)}h</p></div>
-              <div className="rounded-2xl bg-white/[0.06] px-3 py-2"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Daily avg</p><p className="mt-0.5 text-sm font-black text-white">{dailyAverage.toFixed(1)}h</p></div>
-              <div className="rounded-2xl bg-white/[0.06] px-3 py-2"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Overtime</p><p className="mt-0.5 text-sm font-black text-white">{overtimeHours.toFixed(1)}h</p></div>
+              <div className="rounded-2xl bg-white/75 px-3 py-2 ring-1 ring-slate-200/65 dark:bg-white/[0.06] dark:ring-0"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">Remaining</p><p className="mt-0.5 text-sm font-black text-slate-900 dark:text-white">{remainingHours.toFixed(1)}h</p></div>
+              <div className="rounded-2xl bg-white/75 px-3 py-2 ring-1 ring-slate-200/65 dark:bg-white/[0.06] dark:ring-0"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">Daily avg</p><p className="mt-0.5 text-sm font-black text-slate-900 dark:text-white">{dailyAverage.toFixed(1)}h</p></div>
+              <div className="rounded-2xl bg-white/75 px-3 py-2 ring-1 ring-slate-200/65 dark:bg-white/[0.06] dark:ring-0"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">Overtime</p><p className="mt-0.5 text-sm font-black text-slate-900 dark:text-white">{overtimeHours.toFixed(1)}h</p></div>
             </div>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             {!liveShift && <Button type="button" variant="cool" onClick={() => { triggerNativeFeedback("success"); onStart(); }} className="one-tap-clock min-h-14"><Fingerprint className="h-5 w-5" /> One-Tap Clock In</Button>}
-            <Button type="button" variant="outline" onClick={onAddHours} className="min-h-12 border-white/15 bg-white/10 text-white hover:bg-white/15"><Plus className="h-4 w-4" /> Add Hours</Button>
-            <Button type="button" variant="outline" onClick={onOpenTimesheets} className="min-h-12 border-white/15 bg-white/10 text-white hover:bg-white/15"><CalendarDays className="h-4 w-4" /> Timesheet</Button>
+            <Button type="button" variant="outline" onClick={onAddHours} className="min-h-12 border-slate-200 bg-white/80 text-slate-800 hover:bg-white dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><Plus className="h-4 w-4" /> Add Hours</Button>
+            <Button type="button" variant="outline" onClick={onOpenTimesheets} className="min-h-12 border-slate-200 bg-white/80 text-slate-800 hover:bg-white dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><CalendarDays className="h-4 w-4" /> Timesheet</Button>
           </div>
-          {recentJobs.length > 0 && <div className="mt-4"><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Recent jobs</p><div className="flex flex-wrap gap-2">{recentJobs.slice(0,3).map((job) => <span key={job} className="clean-wrap rounded-full border border-white/10 bg-white/[0.07] px-3 py-2 text-xs font-bold text-slate-200">{job}</span>)}</div></div>}
+          {recentJobs.length > 0 && <div className="mt-4"><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Recent jobs</p><div className="flex flex-wrap gap-2">{recentJobs.slice(0,3).map((job) => <span key={job} className="clean-wrap rounded-full border border-slate-200/80 bg-white/76 px-3 py-2 text-xs font-bold text-slate-700 dark:border-white/10 dark:bg-white/[0.07] dark:text-slate-200">{job}</span>)}</div></div>}
         </div>
       </CardContent>
     </Card>
@@ -3218,7 +3246,7 @@ function MiniStat({ label, value, tone }) {
     amber: "text-amber-700 dark:text-amber-200",
     red: "text-red-700 dark:text-red-200",
   };
-  return <div className="min-w-0 rounded-3xl bg-white/75 p-3 shadow-sm ring-1 ring-white/80 sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="break-words text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-slate-400 sm:text-xs">{label}</p><p className={cx("mt-1 break-words text-xl font-black leading-tight sm:text-2xl", tones[tone])}>{value}</p></div>;
+  return <div className="mini-stat min-w-0 rounded-2xl bg-white/82 p-2.5 shadow-sm ring-1 ring-slate-200/70 sm:rounded-3xl sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="mini-stat-label truncate whitespace-nowrap text-[8px] font-black uppercase leading-none tracking-[0.07em] text-slate-500 sm:text-xs sm:tracking-[0.12em] dark:text-slate-400">{label}</p><p className={cx("mini-stat-value mt-1 whitespace-nowrap text-[16px] font-black leading-none tracking-[-0.045em] sm:text-2xl", tones[tone])}>{value}</p></div>;
 }
 
 function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError }) {

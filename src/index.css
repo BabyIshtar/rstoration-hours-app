@@ -965,3 +965,86 @@ header img[alt="Voda icon"] {
   .mobile-more-sheet button { min-height: 72px !important; border-radius: 1rem !important; }
   .native-bottom-nav-inner { min-height: 62px; border-radius: 20px; padding: 5px; }
 }
+
+/* VODA Time — screenshot QA: compact calendar, real light mode, collapsible entries */
+.light {
+  background: linear-gradient(180deg,#f8fafc 0%,#eef3f6 52%,#e8eff3 100%) !important;
+  color:#0f172a !important;
+}
+.light::before { opacity:.35; }
+.light .text-cyan-300,
+.light .text-cyan-200 { color:#0e7490 !important; }
+.light .text-slate-300 { color:#64748b !important; }
+.light .text-slate-400 { color:#64748b !important; }
+.light .text-white:not(.native-bottom-nav-item):not(button) { color:#0f172a; }
+.light .today-panel,
+.light .pay-period-shell {
+  background: rgba(255,255,255,.94) !important;
+  border-color: rgba(51,65,85,.12) !important;
+  box-shadow: 0 12px 34px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.96) !important;
+}
+.light .today-panel .today-stat,
+.light .pay-period-day,
+.light .entries-dropdown-trigger,
+.light .entry-compact-card {
+  background: rgba(248,250,252,.92) !important;
+  border-color: rgba(100,116,139,.18) !important;
+}
+.light .pay-period-shell .pay-period-day { color:#0f172a !important; }
+.light .pay-period-shell .day-hours-value { color:#0e7490 !important; }
+.light .pay-period-shell [class*="bg-white/10"] { background:rgba(226,232,240,.68) !important; }
+.light .native-bottom-nav-inner {
+  background:rgba(255,255,255,.94) !important;
+  border-color:rgba(100,116,139,.18) !important;
+  box-shadow:0 16px 38px rgba(15,23,42,.14),inset 0 1px 0 rgba(255,255,255,1) !important;
+}
+
+.entries-collapsible > div { padding: .8rem !important; }
+.entries-dropdown-trigger { min-height:64px; }
+.entry-details-disclosure > summary::-webkit-details-marker { display:none; }
+.entry-details-disclosure > summary::after { content:" +"; color:#0891b2; }
+.entry-details-disclosure[open] > summary::after { content:" –"; }
+
+@media (max-width:640px) {
+  .pay-period-week-grid { gap:3px !important; }
+  .pay-period-day {
+    min-height:82px !important;
+    padding:6px 1px !important;
+    border-radius:10px !important;
+  }
+  .pay-period-day > div:first-of-type { min-height:27px !important; }
+  .pay-period-day > div:nth-of-type(3) { height:26px !important; }
+  .pay-period-day .date-compact {
+    width:100%;
+    font-size:6.5px !important;
+    letter-spacing:-.045em !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:clip !important;
+  }
+  .pay-period-day .day-hours-value {
+    width:100%;
+    font-size:12px !important;
+    letter-spacing:-.06em !important;
+    white-space:nowrap !important;
+  }
+  .pay-period-day p:first-child { font-size:9px !important; letter-spacing:.015em !important; }
+  .pay-period-day span { white-space:nowrap !important; }
+  .entries-collapsible { margin-top:0 !important; }
+  .entry-compact-card { padding:.75rem !important; }
+
+  .today-panel > div { padding:1rem !important; }
+  .today-panel .grid { gap:.45rem !important; }
+  .today-panel .today-stat { padding:.75rem !important; border-radius:1rem !important; }
+}
+
+@media (max-width:640px) {
+  .week-strip { padding:.65rem .75rem !important; border-radius:.9rem !important; }
+  .week-strip p:first-child { font-size:9px !important; letter-spacing:.11em !important; }
+  .week-strip-range { font-size:9px !important; letter-spacing:-.025em !important; }
+  .payroll-summary-panel { padding:.7rem !important; }
+  .payroll-summary-panel .grid { gap:4px !important; }
+  .mini-stat { min-height:64px; padding:.55rem .45rem !important; border-radius:.8rem !important; }
+  .mini-stat-label { font-size:7.5px !important; letter-spacing:.035em !important; }
+  .mini-stat-value { font-size:14px !important; }
+}
