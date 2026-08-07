@@ -1664,8 +1664,8 @@ export default function RestorationHoursTracker() {
       notes: form.notes.trim(),
       photo_url: form.photoUrl || null,
       employee_signature: form.employeeSignature || null,
-      status: "pending",
-      approval_status: "pending",
+      status: "approved",
+      approval_status: "approved",
     };
 
     if (!navigator.onLine) {
@@ -1713,8 +1713,8 @@ export default function RestorationHoursTracker() {
       notes: String(stoppedShiftReview.notes || "").trim(),
       photo_url: stoppedShiftReview.photoUrl || null,
       employee_signature: stoppedShiftReview.employeeSignature || null,
-      status: "pending",
-      approval_status: "pending",
+      status: "approved",
+      approval_status: "approved",
     };
 
     if (!navigator.onLine) {
@@ -1800,8 +1800,8 @@ export default function RestorationHoursTracker() {
       employee_signature: entry.employeeSignature || null,
       gps_lat: entry.gpsLat || null,
       gps_lng: entry.gpsLng || null,
-      approval_status: entry.approvalStatus || "pending",
-      status: entry.status || entry.approvalStatus || "pending",
+      approval_status: entry.approvalStatus || "approved",
+      status: entry.status || entry.approvalStatus || "approved",
       denial_reason: entry.denialReason || null,
     };
   }
@@ -1912,6 +1912,8 @@ export default function RestorationHoursTracker() {
       lunchTaken: entry.lunchTaken,
       lunchMinutes: entry.lunchMinutes,
       notes: entry.notes || "",
+      approvalStatus: entryApprovalStatus(entry),
+      denialReason: entry.denialReason || "",
     });
   }
 
@@ -1929,9 +1931,9 @@ export default function RestorationHoursTracker() {
         lunch_taken: editModal.lunchTaken,
         lunch_minutes: editModal.lunchTaken ? Number(editModal.lunchMinutes || 0) : 0,
         notes: editModal.notes,
-        approval_status: "pending",
-        status: "pending",
-        denial_reason: null,
+        approval_status: editModal.approvalStatus || "approved",
+        status: editModal.approvalStatus || "approved",
+        denial_reason: editModal.approvalStatus === "denied" ? (editModal.denialReason || "Admin correction") : null,
         reviewed_at: new Date().toISOString(),
       })
       .eq("id", editModal.id);
@@ -1942,8 +1944,8 @@ export default function RestorationHoursTracker() {
       await recordAudit({ action: moved ? "move" : "edit", label: moved ? "Hours moved to another date" : "Hours edited", detail: moved ? `${entry.customerName} · ${displayDate(entry.date)} → ${displayDate(editModal.date)}` : `${entry.customerName} · ${displayDate(entry.date)}`, entry });
       await createPortalMessage({
         recipientId: entry.employeeId,
-        title: "Hours edited by admin",
-        body: `${editModal.customerName || "A time entry"} was edited by admin and returned to pending review. New total: ${entryHours(editModal).toFixed(2)} hrs.`,
+        title: "Hours updated by admin",
+        body: `${editModal.customerName || "A time entry"} was updated by admin. New date: ${displayDate(editModal.date)}. New total: ${entryHours(editModal).toFixed(2)} hrs.`,
         relatedEntryId: editModal.id,
       });
     }
@@ -1955,7 +1957,7 @@ export default function RestorationHoursTracker() {
   async function duplicateHoursEntry(entry) {
     if (!entry?.id) return;
     setAppError("");
-    const copy = { ...entry, id: undefined, approvalStatus: "pending", status: "pending", denialReason: "", reviewedAt: null };
+    const copy = { ...entry, id: undefined, approvalStatus: "approved", status: "approved", denialReason: "", reviewedAt: new Date().toISOString() };
     const payload = entryToInsertPayload(copy);
     const { data, error } = await supabase.from("time_entries").insert(payload).select("*").single();
     if (error) return setAppError(error.message);
@@ -1963,7 +1965,7 @@ export default function RestorationHoursTracker() {
     setEntries((current) => [duplicated, ...current]);
     await recordAudit({ action: "duplicate", label: "Hours duplicated", detail: `${entry.customerName} · ${displayDate(entry.date)} · ${entryHours(entry).toFixed(2)}h`, entry: duplicated });
     triggerNativeFeedback("success");
-    notifyUser("Hours duplicated", "A pending copy was created. Edit it if the date or time needs to change.");
+    notifyUser("Hours duplicated", "An approved copy was created. Edit it if the date or time needs to change.");
     if (currentUser?.role === "admin") openEditModal(duplicated);
     else openDayDetail(duplicated.date, [duplicated, ...entries.filter((item) => item.date === duplicated.date)]);
   }
@@ -2274,9 +2276,8 @@ export default function RestorationHoursTracker() {
               <img src={iconLogo} alt="Voda icon" className="h-full w-full object-contain" />
             </div>
             <div className="min-w-0">
-              <img src={brandLogo} alt="Voda Of Tucson" className="mb-1 hidden h-5 w-auto max-w-[150px] object-contain object-left sm:block dark:brightness-0 dark:invert" />
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-700 sm:hidden dark:text-cyan-300">Voda Of Tucson</p>
-              <h1 className="text-[17px] font-black tracking-[-0.035em] sm:text-xl md:text-2xl">Portal</h1>
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Employee</p>
+              <h1 className="text-[16px] font-black tracking-[-0.035em] sm:text-lg md:text-xl">Portal</h1>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
@@ -2333,36 +2334,36 @@ export default function RestorationHoursTracker() {
               {Array.from({ length: 4 }).map((_, index) => <SkeletonCard key={index} />)}
             </div>}
 
-            {activeSection === "dashboard" && !appLoading && <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+            {activeSection === "dashboard" && !appLoading && <div className="dashboard-metrics grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
               <MetricCard icon={<Clock />} label="Pay Period" value={moneylessHours(payPeriodSummary.totalHours)} />
               <MetricCard icon={<CheckCircle2 />} label="Regular" value={moneylessHours(payPeriodSummary.regularHours)} />
               <MetricCard icon={<Activity />} label="Overtime" value={moneylessHours(payPeriodSummary.overtimeHours)} />
-              <MetricCard icon={<AlertCircle />} label="Pending" value={pendingCount} />
+              <MetricCard icon={<FileText />} label="Entries" value={visibleEntries.length} />
             </div>}
 
-            <Card className={cx("overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/25 dark:border-white/10", !["dashboard", "timesheets"].includes(activeSection) && "hidden")}>
+            <Card className={cx("pay-period-shell overflow-hidden rounded-[1.55rem] border border-white/10 bg-slate-950 text-white shadow-xl shadow-slate-950/20 dark:border-white/10", !["dashboard", "timesheets"].includes(activeSection) && "hidden")}>
               <CardContent className="p-0">
-                <div className="relative overflow-hidden rounded-[2.25rem] bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.18),transparent_28%),linear-gradient(135deg,#111827,#1f2937_52%,#0f172a)]">
+                <div className="relative overflow-hidden rounded-[1.55rem] bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,.18),transparent_28%),linear-gradient(135deg,#111827,#1f2937_52%,#0f172a)]">
                   <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(255,255,255,.08),transparent_34%)]" />
                   <img src={iconLogo} alt="" aria-hidden="true" className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 object-contain opacity-[0.045] brightness-0 invert sm:h-40 sm:w-40" />
 
-                  <div className="relative flex flex-col gap-5 border-b border-white/10 px-4 py-5 sm:px-6 sm:py-6 md:flex-row md:items-center md:justify-between">
+                  <div className="relative flex flex-col gap-3 border-b border-white/10 px-3.5 py-4 sm:px-5 sm:py-5 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0">
                       <div className="mb-2 flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.85)]" />
                         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">Pay period</p>
                       </div>
-                      <h2 className="text-xl font-black tracking-[-0.045em] text-white sm:text-3xl">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
-                      <p className="mt-1 text-sm font-bold tracking-[-0.02em] text-slate-400 sm:text-base">Two-Week Timesheet</p>
+                      <h2 className="text-lg font-black tracking-[-0.04em] text-white sm:text-2xl">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
+                      <p className="mt-1 text-xs font-bold tracking-[-0.01em] text-slate-400 sm:text-sm">Two-Week Timesheet</p>
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
 
                     <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-3">
-                      <Button variant="outline" aria-label="Previous pay period" onClick={() => setWeekStart(addDays(weekStart, -14))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronLeft className="h-5 w-5" /></Button>
-                      <Button variant="outline" aria-label="Next pay period" onClick={() => setWeekStart(addDays(weekStart, 14))} className="h-12 w-12 rounded-[1.25rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronRight className="h-5 w-5" /></Button>
-                      <Button variant="cool" onClick={() => exportCsv(false)} className="h-12 gap-2 rounded-[1.25rem] px-4 text-sm sm:h-14 sm:px-5 sm:text-base"><Download className="h-5 w-5" /> CSV</Button>
-                      <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> Notes</Button>
-                      <Button variant="outline" onClick={exportPayrollPdf} className="h-12 gap-2 rounded-[1.25rem] border-white/15 bg-white/10 px-4 text-sm text-white hover:bg-white/15 sm:h-14 sm:px-5"><FileText className="h-5 w-5" /> PDF</Button>
+                      <Button variant="outline" aria-label="Previous pay period" onClick={() => setWeekStart(addDays(weekStart, -14))} className="h-10 w-10 rounded-[1rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronLeft className="h-5 w-5" /></Button>
+                      <Button variant="outline" aria-label="Next pay period" onClick={() => setWeekStart(addDays(weekStart, 14))} className="h-10 w-10 rounded-[1rem] border-white/15 bg-white/10 p-0 text-white hover:bg-white/15 sm:h-14 sm:w-14"><ChevronRight className="h-5 w-5" /></Button>
+                      <Button variant="cool" onClick={() => exportCsv(false)} className="h-10 gap-1.5 rounded-[1rem] px-3 text-xs sm:h-11 sm:px-4 sm:text-sm"><Download className="h-5 w-5" /> CSV</Button>
+                      <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-10 gap-1.5 rounded-[1rem] border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:h-11 sm:px-4 sm:text-sm"><FileText className="h-5 w-5" /> Notes</Button>
+                      <Button variant="outline" onClick={exportPayrollPdf} className="h-10 gap-1.5 rounded-[1rem] border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:h-11 sm:px-4 sm:text-sm"><FileText className="h-5 w-5" /> PDF</Button>
                     </div>
                   </div>
 
@@ -2427,11 +2428,11 @@ export default function RestorationHoursTracker() {
                       </div>
                     ))}
 
-                    <div className="mt-3 rounded-[1.15rem] border border-cyan-300/15 bg-cyan-300/[0.06] p-3 text-white sm:p-4">
+                    <div className="mt-2.5 rounded-[1rem] border border-cyan-300/12 bg-cyan-300/[0.045] p-2.5 text-white sm:p-3">
                       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                           <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">Payroll Summary</p>
-                          <h3 className="text-lg font-black tracking-[-0.03em]">Two-week pay period</h3>
+                          <h3 className="text-base font-black tracking-[-0.025em] sm:text-lg">Two-week totals</h3>
                         </div>
                         <p className="text-xs font-bold text-slate-300">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
                       </div>
@@ -2660,7 +2661,7 @@ export default function RestorationHoursTracker() {
 
             {currentUser.role === "admin" && activeSection === "history" && <AuditTrailPanel events={auditEvents} employeeById={employeeById} currentUser={currentUser} />}
 
-            {(activeSection === "dashboard" || (activeSection === "review" && currentUser.role !== "admin")) && <Card>
+            {activeSection === "review" && currentUser.role !== "admin" && <Card>
               <CardContent>
                 <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Transparency Log</p><h2 className="text-lg font-black tracking-[-0.03em] sm:text-xl">All Visible Entries</h2></div><CalendarDays className="h-6 w-6 text-cyan-700 dark:text-cyan-300" /></div>
                 <div className="mb-4 grid gap-3 md:grid-cols-2">
@@ -2695,9 +2696,7 @@ export default function RestorationHoursTracker() {
               </CardContent>
             </Card>}
 
-            {activeSection === "dashboard" && <Card className="overflow-hidden border-slate-500/15 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-800 text-white shadow-2xl shadow-cyan-700/15">
-              <CardContent className="relative p-5"><div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-300/14 blur-2xl" /><img src={brandLogo} alt="Voda Of Tucson" className="mb-5 max-h-14 w-auto object-contain brightness-0 invert sm:max-h-16" /><BriefcaseBusiness className="mb-4 h-8 w-8 text-cyan-200" /><h2 className="text-xl font-black tracking-[-0.03em]">Built for Voda Of Tucson field teams.</h2><p className="mt-2 text-sm leading-6 text-cyan-50">Track daily hours by job, verify lunch breaks, and keep weekly payroll transparent between employees and management.</p></CardContent>
-            </Card>}
+
           </motion.aside>
         </main>
       </div>
@@ -2888,7 +2887,7 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
         <div className="mt-5 rounded-3xl bg-slate-900 p-4 text-white shadow-xl shadow-slate-950/10 dark:bg-white/10">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Recorded Total</p>
           <p className="mt-1 text-3xl font-black tracking-[-0.04em]">{entryHours(stoppedShiftReview).toFixed(2)} hrs</p>
-          <p className="mt-1 text-xs font-bold text-slate-300">This will be submitted as pending until an admin approves it.</p>
+          <p className="mt-1 text-xs font-bold text-slate-300">This entry will be approved automatically. An admin can change its status if a correction is needed.</p>
         </div>
 
         <div className="mt-5 grid gap-2 sm:grid-cols-3">
@@ -3241,7 +3240,7 @@ function EditHoursModal({ editModal, setEditModal, saveEditedHours }) {
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/70 bg-slate-50/92 p-5 shadow-2xl shadow-slate-950/20 ring-1 ring-white/80 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/92 dark:ring-white/10">
         <div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Admin hour correction</p><h2 className="mt-1 text-2xl font-black tracking-[-0.03em]">Edit / move employee hours</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">{editModal.employeeName}</p></div><Button variant="ghost" onClick={() => setEditModal(null)}><X className="h-5 w-5" /></Button></div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Date"><input type="date" value={editModal.date} onChange={(e) => setEditModal({ ...editModal, date: e.target.value })} className="input" /></Field>
+          <Field label="Move To Date"><input type="date" value={editModal.date} onChange={(e) => setEditModal({ ...editModal, date: e.target.value })} className="input" /></Field>
           <Field label="Job Type"><select value={editModal.jobType} onChange={(e) => setEditModal({ ...editModal, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
           <Field label="Job / Customer Name"><input value={editModal.customerName} onChange={(e) => setEditModal({ ...editModal, customerName: e.target.value })} className="input" /></Field>
           <Field label="Start Time"><input type="time" value={editModal.start} onChange={(e) => setEditModal({ ...editModal, start: e.target.value })} className="input" /></Field>
@@ -3250,7 +3249,7 @@ function EditHoursModal({ editModal, setEditModal, saveEditedHours }) {
           <Field label="Lunch Minutes"><input type="number" min="0" value={editModal.lunchMinutes} disabled={!editModal.lunchTaken} onChange={(e) => setEditModal({ ...editModal, lunchMinutes: Number(e.target.value) })} className="input disabled:opacity-40" /></Field>
           <div className="sm:col-span-2"><Field label="Admin Notes / Correction Reason"><textarea value={editModal.notes} onChange={(e) => setEditModal({ ...editModal, notes: e.target.value })} className="input min-h-28 resize-none" /></Field></div>
         </div>
-        <div className="mt-4 rounded-3xl bg-slate-900 p-4 text-white dark:bg-white/10"><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Corrected Total</p><p className="text-2xl font-black">{entryHours(editModal).toFixed(2)} hrs</p><p className="mt-1 text-xs font-bold text-slate-300">Change the date to move these hours to another day. Saving returns the entry to pending review.</p></div>
+        <div className="mt-4 rounded-3xl bg-slate-900 p-4 text-white dark:bg-white/10"><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Corrected Total</p><p className="text-2xl font-black">{entryHours(editModal).toFixed(2)} hrs</p><p className="mt-1 text-xs font-bold text-slate-300">Change the date to move these hours to another day. Saving keeps the current approval status unless an admin changes it.</p></div>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button variant="outline" onClick={() => setEditModal(null)} className="flex-1 py-3">Cancel</Button><Button variant="cool" onClick={saveEditedHours} className="flex-1 py-3"><Edit3 className="mr-2 h-4 w-4" /> Save Changes</Button></div>
       </motion.div>
     </div>
