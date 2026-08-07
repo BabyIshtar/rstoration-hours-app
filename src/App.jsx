@@ -2278,8 +2278,8 @@ export default function RestorationHoursTracker() {
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="pointer-events-none fixed -left-28 top-20 h-80 w-80 rounded-full bg-cyan-300/14 blur-3xl" />
-      <div className="pointer-events-none fixed -right-32 top-1/2 h-96 w-96 rounded-full bg-slate-600/12 blur-3xl" />
+      <div className="ambient-orb pointer-events-none fixed -left-28 top-20 h-80 w-80 rounded-full bg-cyan-300/14 blur-3xl" />
+      <div className="ambient-orb pointer-events-none fixed -right-32 top-1/2 h-96 w-96 rounded-full bg-slate-600/12 blur-3xl" />
       <div className="relative mx-auto w-full max-w-[1540px] overflow-x-hidden px-3 py-3 pb-28 sm:px-4 sm:py-4 sm:pb-28 md:pb-4 lg:px-5 mobile-padding">
         <motion.header {...softMotion} className="sticky top-2 z-20 mb-4 flex max-w-full flex-col gap-3 overflow-hidden rounded-[1.6rem] border border-white/55 bg-white/74 p-3 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 sm:top-4 sm:mb-5 sm:p-4 md:flex-row md:items-center md:justify-between dark:border-white/10 dark:bg-slate-900/68 dark:ring-white/10">
           <div className="flex items-center gap-3">
@@ -2364,7 +2364,7 @@ export default function RestorationHoursTracker() {
                         <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.85)]" />
                         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Pay period</p>
                       </div>
-                      <h2 className="text-lg font-black tracking-[-0.04em] text-slate-950 sm:text-2xl dark:text-white">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
+                      <h2 className="no-ui-wrap truncate text-lg font-black tracking-[-0.04em] text-slate-950 sm:text-2xl dark:text-white">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</h2>
                       <p className="mt-1 text-xs font-bold tracking-[-0.01em] text-slate-600 sm:text-sm dark:text-slate-400">Two-Week Timesheet</p>
                       {appLoading && <p className="mt-2 text-xs font-bold text-cyan-200/80">Syncing with Supabase...</p>}
                     </div>
@@ -2442,7 +2442,7 @@ export default function RestorationHoursTracker() {
                     <div className="payroll-summary-panel mt-2.5 rounded-[1rem] border border-cyan-700/10 bg-cyan-50/55 p-2.5 text-slate-950 sm:p-3 dark:border-cyan-300/12 dark:bg-cyan-300/[0.045] dark:text-white">
                       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-200">Payroll Summary</p>
+                          <p className="no-ui-wrap text-[11px] font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-200">Payroll Summary</p>
                           <h3 className="text-base font-black tracking-[-0.025em] sm:text-lg">Two-week totals</h3>
                         </div>
                         <p className="whitespace-nowrap text-xs font-bold text-slate-600 dark:text-slate-300">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
