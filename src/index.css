@@ -1323,3 +1323,100 @@ button, .bubble-fit {
 /* Reports prioritize readability over squeezing controls onto one line. */
 .employee-report-card { flex-direction: column !important; align-items: stretch !important; }
 .employee-report-card button { width: 100% !important; max-width: 100% !important; }
+
+/* Final coordinated admin/report visual pass */
+.report-hero,
+.manage-admin-hero {
+  background: linear-gradient(135deg, #07111f 0%, #0d1b2e 56%, #07526a 100%) !important;
+  color: #fff !important;
+}
+.light .report-hero :where(h1,h2,h3,h4,p,span,strong,b),
+.light .manage-admin-hero :where(h1,h2,h3,h4,p,span,strong,b) {
+  color: #fff !important;
+}
+.light .report-hero .text-slate-300,
+.light .report-hero .text-slate-200,
+.light .manage-admin-hero .text-slate-300,
+.light .manage-admin-hero .text-slate-200 { color: #d7e3ed !important; }
+.light .report-hero .text-cyan-200,
+.light .manage-admin-hero .text-cyan-100,
+.light .manage-admin-hero .text-cyan-200 { color: #a5f3fc !important; }
+
+.report-summary-grid .mini-stat {
+  min-width: 0;
+  overflow: hidden;
+}
+.report-summary-grid .mini-stat-label {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  font-size: 9px !important;
+  letter-spacing: .055em !important;
+}
+.report-summary-grid .mini-stat-value { font-size: 1.15rem !important; }
+@media (min-width: 1280px) {
+  .report-summary-grid .mini-stat-label { font-size: 10px !important; }
+  .report-summary-grid .mini-stat-value { font-size: 1.35rem !important; }
+}
+
+.light .report-job-card,
+.light .manage-section-card,
+.light .employee-profile-job,
+.light .manage-employee-card {
+  background: rgba(255,255,255,.96) !important;
+  border-color: rgba(15,23,42,.12) !important;
+  color: #0b1526 !important;
+}
+.dark .report-job-card,
+.dark .manage-section-card,
+.dark .employee-profile-job,
+.dark .manage-employee-card {
+  background: rgba(12,18,28,.86) !important;
+  border-color: rgba(148,163,184,.14) !important;
+}
+
+.manage-admin-shell { overflow: hidden; }
+.manage-hero-stat {
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,.13);
+  background: rgba(255,255,255,.08);
+  border-radius: 1rem;
+  padding: .75rem .8rem;
+  backdrop-filter: blur(10px);
+}
+.manage-hero-stat span {
+  display: block;
+  color: #cbd5e1 !important;
+  font-size: 9px;
+  line-height: 1.1;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.manage-hero-stat strong {
+  display: block;
+  margin-top: .35rem;
+  color: #fff !important;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.manage-employee-card > button { min-height: 0; }
+.employee-profile-panel { scroll-margin-top: 6rem; }
+.employee-profile-job > summary::-webkit-details-marker { display: none; }
+.employee-profile-job > summary::after {
+  content: "+";
+  flex: 0 0 auto;
+  color: #0891b2;
+  font-weight: 900;
+}
+.employee-profile-job[open] > summary::after { content: "–"; }
+
+@media (max-width: 640px) {
+  .report-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .report-summary-grid .mini-stat { padding: .75rem !important; min-height: 70px; }
+  .report-summary-grid .mini-stat-label { font-size: 8.5px !important; }
+  .report-summary-grid .mini-stat-value { font-size: 1.05rem !important; }
+  .manage-hero-stat { padding: .65rem .55rem; }
+  .manage-hero-stat span { font-size: 8px; letter-spacing: .04em; }
+  .manage-hero-stat strong { font-size: 1rem; }
+}

@@ -854,6 +854,8 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
 function AdminControlCenter({
   employees,
   jobs,
+  entries,
+  exportPayrollPdf,
   inviteEmail,
   setInviteEmail,
   inviteNote,
@@ -866,94 +868,92 @@ function AdminControlCenter({
   createJobRecord,
   updateJobStatus,
 }) {
+  const [selectedProfileId, setSelectedProfileId] = useState(null);
+  const selectedProfile = employees.find((employee) => employee.id === selectedProfileId) || null;
+  const employeeEntries = selectedProfile ? sortEntriesByDateTime(entries.filter((entry) => entry.employeeId === selectedProfile.id && !isDeniedEntry(entry))) : [];
+  const employeeApprovedEntries = employeeEntries.filter((entry) => entryApprovalStatus(entry) === "approved");
+  const employeeSummary = summarizePayroll(employeeEntries);
+  const employeeApprovedHours = employeeApprovedEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+  const employeeJobs = selectedProfile ? Object.values(employeeEntries.reduce((acc, entry) => {
+    const name = canonicalJobName(entry.customerName || "Unnamed Job", employeeEntries.map((item) => item.customerName).filter(Boolean));
+    const key = jobKey(name);
+    if (!acc[key]) acc[key] = { key, name, total: 0, entries: [], dates: new Set() };
+    acc[key].total += entryHours(entry);
+    acc[key].entries.push(entry);
+    acc[key].dates.add(entry.date);
+    return acc;
+  }, {})).sort((a, b) => b.total - a.total) : [];
+  const activeEmployeeCount = employees.filter((employee) => employee.active !== false).length;
+  const activeJobCount = jobs.filter((job) => !["completed", "closed"].includes(String(job.status || "active").toLowerCase())).length;
+
   return (
-    <Card>
-      <CardContent>
-        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">Admin Control Center</p>
-            <h2 className="text-xl font-black tracking-[-0.04em] sm:text-2xl">Employees & Jobs</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Manage hours access, roles, active employees, and job records from inside the app.</p>
+    <Card className="manage-admin-shell overflow-hidden">
+      <CardContent className="p-0">
+        <div className="manage-admin-hero p-5 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-100">Admin management</p>
+              <h2 className="mt-1 text-2xl font-black tracking-[-0.045em] text-white sm:text-3xl">Team & job control center</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-200">Open an employee profile for their complete work history, manage access, and maintain the shared master job database.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[360px]">
+              <div className="manage-hero-stat"><span>Employees</span><strong>{activeEmployeeCount}</strong></div>
+              <div className="manage-hero-stat"><span>Active jobs</span><strong>{activeJobCount}</strong></div>
+              <div className="manage-hero-stat"><span>Entries</span><strong>{entries.filter((entry) => !isDeniedEntry(entry)).length}</strong></div>
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_0.95fr]">
-          <div className="rounded-[1.5rem] border border-white/70 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-black tracking-[-0.03em]">Employee management</h3>
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Set role, status, hourly rate, and approval access.</p>
-              </div>
-              <Users className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
-            </div>
-
-            <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_auto]">
-              <input className="input" type="email" placeholder="employee@email.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
-              <Button onClick={createInviteDraft} className="gap-2"><Plus className="h-4 w-4" /> Invite draft</Button>
-            </div>
-            {inviteNote && <p className="mb-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs font-bold text-cyan-800 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-100">{inviteNote}</p>}
-
-            <div className="space-y-3">
-              {employees.map((employee) => {
-                const draft = employeeDrafts[employee.id] || employee;
-                const isActive = draft.active !== false;
-                return (
-                  <div key={employee.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="employee-name-chip inline-flex max-w-full text-sm font-black">{employee.name}</p>
-                        <p className="clean-wrap text-xs font-bold leading-snug text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
-                      </div>
-                      <span className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]", isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200" : "bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400")}>{isActive ? "Active" : "Inactive"}</span>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-4">
-                      <select className="input" value={draft.role || "employee"} onChange={(e) => updateEmployeeDraft(employee.id, { role: e.target.value })}>{employeeRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select>
-                      <select className="input" value={String(draft.active !== false)} onChange={(e) => updateEmployeeDraft(employee.id, { active: e.target.value === "true" })}><option value="true">Active</option><option value="false">Inactive</option></select>
-                      <input className="input" type="number" min="0" step="0.01" placeholder="Hourly rate" value={draft.hourlyRate ?? ""} onChange={(e) => updateEmployeeDraft(employee.id, { hourlyRate: e.target.value })} />
-                      <Button variant="outline" onClick={() => saveEmployeeControls(employee.id)} className="gap-2"><CheckCircle2 className="h-4 w-4" /> Save</Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-[1.5rem] border border-white/70 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-black tracking-[-0.03em]">Job database</h3>
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Create permanent job records for hours tracking.</p>
-              </div>
-              <BriefcaseBusiness className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
-            </div>
-            <div className="grid gap-2">
-              <input className="input" placeholder="Customer / job name" value={jobForm.customerName} onChange={(e) => setJobForm((current) => ({ ...current, customerName: e.target.value }))} />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <input className="input" placeholder="Job number" value={jobForm.jobNumber} onChange={(e) => setJobForm((current) => ({ ...current, jobNumber: e.target.value }))} />
-                <select className="input" value={jobForm.jobType} onChange={(e) => setJobForm((current) => ({ ...current, jobType: e.target.value }))}>{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
-              </div>
-              <input className="input" placeholder="Customer address" value={jobForm.address} onChange={(e) => setJobForm((current) => ({ ...current, address: e.target.value }))} />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <input className="input" placeholder="Insurance / carrier" value={jobForm.carrier} onChange={(e) => setJobForm((current) => ({ ...current, carrier: e.target.value }))} />
-                <input className="input" placeholder="Claim number" value={jobForm.claimNumber} onChange={(e) => setJobForm((current) => ({ ...current, claimNumber: e.target.value }))} />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <select className="input" value={jobForm.assignedEmployeeId} onChange={(e) => setJobForm((current) => ({ ...current, assignedEmployeeId: e.target.value }))}>
-                  <option value="">Unassigned</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
-                </select>
-                <Button onClick={createJobRecord} className="gap-2"><Plus className="h-4 w-4" /> Create job</Button>
-              </div>
-            </div>
-            <div className="mt-5 space-y-3">
-              {jobs.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm font-bold text-slate-400 dark:border-white/10 dark:text-slate-500">No jobs created yet.</div> : jobs.map((job) => (
-                <div key={job.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0"><p className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType} {job.jobNumber ? `• ${job.jobNumber}` : ""}</p>{job.address && <p className="mt-1 truncate text-xs font-semibold text-slate-400 dark:text-slate-500">{job.address}</p>}</div>
-                    <select className="input max-w-[150px]" value={job.status || "active"} onChange={(e) => updateJobStatus(job.id, e.target.value)}>{jobStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select>
-                  </div>
+        <div className="space-y-5 p-4 sm:p-5">
+          {selectedProfile && (
+            <section className="employee-profile-panel rounded-[1.75rem] border border-cyan-200/70 bg-cyan-50/55 p-4 shadow-sm dark:border-cyan-300/15 dark:bg-cyan-400/[0.055] sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300">Employee summary profile</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2"><span className="employee-name-chip text-base font-black sm:text-lg">{selectedProfile.name}</span><span className="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 ring-1 ring-slate-200 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">{selectedProfile.role || "employee"}</span></div>
+                  <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">{selectedProfile.email || "No email saved"}</p>
                 </div>
-              ))}
-            </div>
+                <div className="flex gap-2"><Button variant="outline" onClick={() => exportPayrollPdf(selectedProfile.id)}><FileText className="mr-2 h-4 w-4" /> Print report</Button><Button variant="ghost" onClick={() => setSelectedProfileId(null)}><X className="h-4 w-4" /></Button></div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <MiniStat label="All-time hours" value={`${employeeSummary.totalHours.toFixed(2)}h`} tone="cyan" />
+                <MiniStat label="Approved" value={`${employeeApprovedHours.toFixed(2)}h`} tone="emerald" />
+                <MiniStat label="Jobs" value={employeeJobs.length} tone="cyan" />
+                <MiniStat label="Entries" value={employeeEntries.length} tone="cyan" />
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2 flex items-end justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Job history</p><h3 className="text-lg font-black">Hours by job</h3></div><p className="text-xs font-bold text-slate-500 dark:text-slate-400">All recorded history</p></div>
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {employeeJobs.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-5 text-center text-sm font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No hours recorded for this employee yet.</div> : employeeJobs.map((job) => (
+                    <details key={job.key} className="employee-profile-job overflow-hidden rounded-2xl border border-slate-200 bg-white/90 dark:border-white/10 dark:bg-slate-950/35">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3.5"><div className="min-w-0"><p className="clean-wrap font-black text-slate-950 dark:text-white">{job.name}</p><p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{job.dates.size} day{job.dates.size === 1 ? "" : "s"} · {job.entries.length} entr{job.entries.length === 1 ? "y" : "ies"}</p></div><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{job.total.toFixed(2)}h</span></summary>
+                      <div className="border-t border-slate-100 p-3 dark:border-white/10">{job.entries.map((entry) => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400"><span>{displayDate(entry.date)} · {entry.jobType || "Job"}</span><span className="font-black text-slate-700 dark:text-slate-200">{entryHours(entry).toFixed(2)} hrs</span></div>)}</div>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+            <section className="manage-section-card rounded-[1.65rem] border border-slate-200/80 bg-white/75 p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Team</p><h3 className="text-xl font-black tracking-[-0.035em]">Employee management</h3><p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Click an employee to open their individual summary profile.</p></div><Users className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /></div>
+              <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_auto]"><input className="input" type="email" placeholder="employee@email.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} /><Button onClick={createInviteDraft} className="gap-2"><Plus className="h-4 w-4" /> Invite draft</Button></div>
+              {inviteNote && <p className="mb-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs font-bold text-cyan-800 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-100">{inviteNote}</p>}
+              <div className="space-y-3">{employees.map((employee) => { const draft = employeeDrafts[employee.id] || employee; const isActive = draft.active !== false; const personEntries = entries.filter((entry) => entry.employeeId === employee.id && !isDeniedEntry(entry)); const hours = personEntries.reduce((sum, entry) => sum + entryHours(entry), 0); return (
+                <div key={employee.id} className={cx("manage-employee-card rounded-[1.35rem] border p-3.5 transition", selectedProfileId === employee.id ? "border-cyan-300 bg-cyan-50/70 dark:border-cyan-300/25 dark:bg-cyan-400/[0.07]" : "border-slate-200/80 bg-slate-50/65 dark:border-white/10 dark:bg-slate-950/25")}>
+                  <button type="button" onClick={() => setSelectedProfileId(employee.id)} className="mb-3 flex w-full items-start justify-between gap-3 rounded-xl text-left"><div className="min-w-0"><span className="employee-name-chip inline-flex max-w-full text-sm font-black sm:text-base">{employee.name}</span><p className="mt-1 clean-wrap text-xs font-semibold text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p><p className="mt-1 text-[11px] font-black text-cyan-700 dark:text-cyan-300">{hours.toFixed(2)} all-time hrs · {new Set(personEntries.map((entry) => jobKey(entry.customerName))).size} jobs</p></div><div className="flex shrink-0 flex-col items-end gap-2"><span className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]", isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200" : "bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400")}>{isActive ? "Active" : "Inactive"}</span><span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">View profile →</span></div></button>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><select className="input" value={draft.role || "employee"} onChange={(e) => updateEmployeeDraft(employee.id, { role: e.target.value })}>{employeeRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select><select className="input" value={String(draft.active !== false)} onChange={(e) => updateEmployeeDraft(employee.id, { active: e.target.value === "true" })}><option value="true">Active</option><option value="false">Inactive</option></select><input className="input" type="number" min="0" step="0.01" placeholder="Hourly rate" value={draft.hourlyRate ?? ""} onChange={(e) => updateEmployeeDraft(employee.id, { hourlyRate: e.target.value })} /><Button variant="outline" onClick={() => saveEmployeeControls(employee.id)} className="gap-2"><CheckCircle2 className="h-4 w-4" /> Save</Button></div>
+                </div>); })}</div>
+            </section>
+
+            <section className="manage-section-card rounded-[1.65rem] border border-slate-200/80 bg-white/75 p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Shared jobs</p><h3 className="text-xl font-black tracking-[-0.035em]">Master job database</h3><p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Maintain the official names employees share across hours entries.</p></div><BriefcaseBusiness className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /></div>
+              <div className="grid gap-2"><input className="input" placeholder="Customer / job name" value={jobForm.customerName} onChange={(e) => setJobForm((current) => ({ ...current, customerName: e.target.value }))} /><div className="grid gap-2 sm:grid-cols-2"><input className="input" placeholder="Job number" value={jobForm.jobNumber} onChange={(e) => setJobForm((current) => ({ ...current, jobNumber: e.target.value }))} /><select className="input" value={jobForm.jobType} onChange={(e) => setJobForm((current) => ({ ...current, jobType: e.target.value }))}>{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></div><input className="input" placeholder="Customer address" value={jobForm.address} onChange={(e) => setJobForm((current) => ({ ...current, address: e.target.value }))} /><div className="grid gap-2 sm:grid-cols-2"><input className="input" placeholder="Insurance / carrier" value={jobForm.carrier} onChange={(e) => setJobForm((current) => ({ ...current, carrier: e.target.value }))} /><input className="input" placeholder="Claim number" value={jobForm.claimNumber} onChange={(e) => setJobForm((current) => ({ ...current, claimNumber: e.target.value }))} /></div><div className="grid gap-2 sm:grid-cols-[1fr_auto]"><select className="input" value={jobForm.assignedEmployeeId} onChange={(e) => setJobForm((current) => ({ ...current, assignedEmployeeId: e.target.value }))}><option value="">Unassigned</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select><Button onClick={createJobRecord} className="gap-2"><Plus className="h-4 w-4" /> Create job</Button></div></div>
+              <div className="mt-5 space-y-3">{jobs.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm font-bold text-slate-400 dark:border-white/10 dark:text-slate-500">No jobs created yet.</div> : jobs.map((job) => <div key={job.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/70 p-3.5 dark:border-white/10 dark:bg-slate-950/25"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-cyan-700 dark:text-cyan-300">{job.jobType} {job.jobNumber ? `• ${job.jobNumber}` : ""}</p>{job.address && <p className="mt-1 clean-wrap text-xs font-semibold text-slate-500 dark:text-slate-400">{job.address}</p>}</div><select className="input sm:max-w-[150px]" value={job.status || "active"} onChange={(e) => updateJobStatus(job.id, e.target.value)}>{jobStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></div></div>)}</div>
+            </section>
           </div>
         </div>
       </CardContent>
@@ -2785,6 +2785,8 @@ export default function RestorationHoursTracker() {
               <AdminControlCenter
                 employees={employees}
                 jobs={jobs}
+                entries={entries}
+                exportPayrollPdf={exportPayrollPdf}
                 inviteEmail={inviteEmail}
                 setInviteEmail={setInviteEmail}
                 inviteNote={inviteNote}
@@ -3455,7 +3457,7 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
-        <div className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-900 p-5 text-white sm:p-6">
+        <div className="report-hero relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-900 p-5 text-white sm:p-6">
           <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-cyan-300/15 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -3481,7 +3483,7 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
             <Button variant="outline" onClick={() => exportPayrollPdf()} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Hours PDF</Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-8">
+          <div className="report-summary-grid grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-8">
             <MiniStat label="Week 2" value={`${weekOneSummary.totalHours.toFixed(2)}h`} tone="cyan" />
             <MiniStat label="Week 1" value={`${weekTwoSummary.totalHours.toFixed(2)}h`} tone="cyan" />
             <MiniStat label="Period" value={`${periodSummary.totalHours.toFixed(2)}h`} tone="emerald" />
@@ -3496,7 +3498,7 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
             <section className="rounded-[1.65rem] border border-white/70 bg-white/72 p-4 shadow-sm ring-1 ring-white/70 dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
               <div className="mb-3"><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Job labor report</p><h3 className="text-lg font-black tracking-[-0.03em]">Hours automatically totaled by job</h3></div>
               <div className="grid gap-2 lg:grid-cols-2">
-                {laborByJob.map((job) => <div key={jobKey(job.name)} className="min-w-0 rounded-3xl border border-slate-100 bg-white p-4 dark:border-white/10 dark:bg-slate-950/30"><div className="flex min-w-0 items-start justify-between gap-3"><p className="min-w-0 truncate font-black" title={job.name}>{job.name}</p><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{job.total.toFixed(2)}h</span></div><div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(job.employees).sort((a,b) => b[1]-a[1]).map(([name,hours]) => <span key={name} className="max-w-full rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-white/5 dark:text-slate-300"><span className="employee-name-inline inline-block max-w-[13rem] truncate align-bottom">{name}</span> · {hours.toFixed(2)}h</span>)}</div></div>)}
+                {laborByJob.map((job) => <div key={jobKey(job.name)} className="report-job-card min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/30"><div className="flex min-w-0 items-start justify-between gap-3"><p className="clean-wrap min-w-0 font-black leading-snug" title={job.name}>{job.name}</p><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{job.total.toFixed(2)}h</span></div><div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(job.employees).sort((a,b) => b[1]-a[1]).map(([name,hours]) => <span key={name} className="max-w-full rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-white/5 dark:text-slate-300"><span className="employee-name-inline inline-block max-w-[13rem] truncate align-bottom">{name}</span> · {hours.toFixed(2)}h</span>)}</div></div>)}
               </div>
             </section>
           )}
@@ -3764,7 +3766,7 @@ function MiniStat({ label, value, tone }) {
     amber: "text-amber-700 dark:text-amber-200",
     red: "text-red-700 dark:text-red-200",
   };
-  return <div className="mini-stat min-w-0 rounded-2xl bg-white/82 p-2.5 shadow-sm ring-1 ring-slate-200/70 sm:rounded-3xl sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="mini-stat-label truncate whitespace-nowrap text-[8px] font-black uppercase leading-none tracking-[0.07em] text-slate-500 sm:text-xs sm:tracking-[0.12em] dark:text-slate-400">{label}</p><p className={cx("mini-stat-value mt-1 whitespace-nowrap text-[16px] font-black leading-none tracking-[-0.045em] sm:text-2xl", tones[tone])}>{value}</p></div>;
+  return <div className="mini-stat min-w-0 rounded-2xl bg-white/82 p-2.5 shadow-sm ring-1 ring-slate-200/70 sm:rounded-3xl sm:p-4 dark:bg-white/5 dark:ring-white/10"><p className="mini-stat-label whitespace-nowrap text-[8px] font-black uppercase leading-none tracking-[0.07em] text-slate-500 sm:text-xs sm:tracking-[0.12em] dark:text-slate-400">{label}</p><p className={cx("mini-stat-value mt-1 whitespace-nowrap text-[16px] font-black leading-none tracking-[-0.045em] sm:text-2xl", tones[tone])}>{value}</p></div>;
 }
 
 function ReviewModal({ reviewModal, setReviewModal, updateStatus, setAppError }) {
