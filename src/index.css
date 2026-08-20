@@ -1265,3 +1265,61 @@ button, .bubble-fit {
   .native-sheet > *, .mobile-more-sheet, header { backdrop-filter: blur(14px) saturate(125%); -webkit-backdrop-filter: blur(14px) saturate(125%); }
   button:hover { transform: none; }
 }
+
+/* Final admin readability + employee identification */
+.employee-report-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: .75rem;
+  min-width: 0;
+}
+.employee-name-chip,
+.employee-name-inline {
+  max-width: 100%;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  hyphens: none;
+  white-space: normal;
+}
+.employee-name-chip {
+  border-radius: 9999px;
+  background: rgba(8,145,178,.10);
+  color: rgb(14 116 144);
+  padding: .28rem .65rem;
+  line-height: 1.25;
+  box-shadow: inset 0 0 0 1px rgba(8,145,178,.12);
+}
+.employee-name-inline {
+  font-weight: 900;
+  color: rgb(14 116 144);
+}
+.dark .employee-name-chip {
+  background: rgba(34,211,238,.12);
+  color: rgb(165 243 252);
+  box-shadow: inset 0 0 0 1px rgba(103,232,249,.12);
+}
+.dark .employee-name-inline { color: rgb(165 243 252); }
+.job-name-link {
+  overflow-wrap: anywhere;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  text-decoration-color: rgba(8,145,178,.35);
+}
+@media (min-width: 640px) {
+  .employee-report-card {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+@media (max-width: 639px) {
+  .employee-report-card { padding: .9rem !important; }
+  .employee-report-card .employee-name-chip { display: inline-flex; width: auto; }
+  .employee-report-card p { max-width: 100%; }
+}
+
+/* Reports prioritize readability over squeezing controls onto one line. */
+.employee-report-card { flex-direction: column !important; align-items: stretch !important; }
+.employee-report-card button { width: 100% !important; max-width: 100% !important; }

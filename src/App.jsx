@@ -206,35 +206,64 @@ function getWeeklyJobSuggestions(entries = [], selectedDate, currentUser, select
 
 function getSmartJobSuggestions(entries = [], activeJobs = [], selectedDate, currentUser, selectedEmployeeId = "all") {
   const weekly = getWeeklyJobSuggestions(entries, selectedDate, currentUser, selectedEmployeeId);
+  const historical = entries
+    .map((entry) => String(entry.customerName || "").trim())
+    .filter(Boolean);
   const active = activeJobs
     .map((job) => String(job.customerName || job.name || job.title || "").trim())
     .filter(Boolean);
-  return [...new Set([...weekly, ...active])].sort((a, b) => a.localeCompare(b));
+  const raw = [...new Set([...weekly, ...active, ...historical])];
+  const canonical = raw.map((name) => canonicalJobName(name, raw));
+  return [...new Set(canonical)].sort((a, b) => a.localeCompare(b));
 }
 
 function jobKey(value = "") {
   return String(value).toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
+function jobTokens(value = "") {
+  return jobKey(value).split(" ").filter(Boolean);
+}
+
+function jobNamesLikelySame(a, b) {
+  const left = jobTokens(a);
+  const right = jobTokens(b);
+  if (!left.length || !right.length || left[0] !== right[0]) return false;
+  if (jobKey(a) === jobKey(b)) return true;
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length <= right.length ? right : left;
+  if (shorter.length > longer.length) return false;
+  // Treat initials/abbreviations as aliases only when each supplied token is a prefix
+  // of the corresponding fuller token. Example: "Jenn H" -> "Jenn Halp".
+  return shorter.every((token, index) => {
+    const full = longer[index];
+    if (!full) return false;
+    return full === token || full.startsWith(token) || token.startsWith(full);
+  });
+}
+
 function canonicalJobName(value, suggestions = []) {
   const raw = String(value || "").trim().replace(/\s+/g, " ");
   if (!raw) return "";
-  const key = jobKey(raw);
-  const exact = suggestions.find((name) => jobKey(name) === key);
-  if (exact) return exact;
-  // Only consolidate very close variants; never merge genuinely different customer jobs.
-  const tokens = key.split(" ").filter(Boolean);
-  const close = suggestions.find((name) => {
-    const other = jobKey(name);
-    const otherTokens = other.split(" ").filter(Boolean);
-    if (!tokens.length || !otherTokens.length) return false;
-    const shared = tokens.filter((token) => otherTokens.includes(token)).length;
-    const similarity = shared / Math.max(tokens.length, otherTokens.length);
-    return similarity >= 0.8 && Math.abs(key.length - other.length) <= 8;
-  });
-  return close || raw;
+  const candidates = [...new Set([raw, ...suggestions.map((name) => String(name || "").trim()).filter(Boolean)])]
+    .filter((name) => jobNamesLikelySame(raw, name));
+  if (!candidates.length) return raw;
+  // Prefer the most complete established name, then stable alphabetical ordering.
+  return candidates.sort((a, b) => {
+    const tokenDiff = jobTokens(b).length - jobTokens(a).length;
+    if (tokenDiff) return tokenDiff;
+    const lengthDiff = b.length - a.length;
+    if (lengthDiff) return lengthDiff;
+    return a.localeCompare(b);
+  })[0];
 }
 
+
+
+function canonicalizeEntryJobNames(entries = []) {
+  const names = [...new Set(entries.map((entry) => String(entry.customerName || "").trim()).filter(Boolean))];
+  return entries.map((entry) => ({ ...entry, customerName: canonicalJobName(entry.customerName, names) }));
+}
 
 function formatDate(date = new Date()) {
   const target = date instanceof Date ? date : phoenixDateKeyToDate(String(date));
@@ -779,7 +808,7 @@ function AdminApprovalQueue({ approvalGroups, expandedApprovalGroups, toggleAppr
                   <div className="flex min-w-0 items-center gap-3">
                     <AvatarBadge person={employee} />
                     <div className="min-w-0">
-                      <h3 className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{employee.name}</h3>
+                      <h3 className="employee-name-chip inline-flex max-w-full text-sm font-black">{employee.name}</h3>
                       <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{entries.length} pending · {totalHours.toFixed(2)} hrs awaiting review</p>
                     </div>
                   </div>
@@ -872,7 +901,7 @@ function AdminControlCenter({
                   <div key={employee.id} className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/75 p-3 dark:border-white/10 dark:bg-slate-950/25">
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="clean-wrap text-sm font-black leading-snug text-slate-950 dark:text-white">{employee.name}</p>
+                        <p className="employee-name-chip inline-flex max-w-full text-sm font-black">{employee.name}</p>
                         <p className="clean-wrap text-xs font-bold leading-snug text-slate-500 dark:text-slate-400">{employee.email || "No email saved"}</p>
                       </div>
                       <span className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]", isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200" : "bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400")}>{isActive ? "Active" : "Inactive"}</span>
@@ -1125,13 +1154,47 @@ export default function RestorationHoursTracker() {
       const normalized = normalizeEntry(payload.new);
       setEntries((current) => {
         const exists = current.some((entry) => entry.id === normalized.id);
-        if (!exists) return [normalized, ...current];
-        return current.map((entry) => entry.id === normalized.id ? normalized : entry);
+        const next = !exists ? [normalized, ...current] : current.map((entry) => entry.id === normalized.id ? normalized : entry);
+        return canonicalizeEntryJobNames(next);
       });
     }).subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [currentUser?.id, currentUser?.role]);
+
+  // Master jobs are team-wide. Keep the shared list current so a job created by one
+  // employee becomes selectable by everyone else without waiting for a full reload.
+  useEffect(() => {
+    if (!currentUser?.id) return undefined;
+    const channel = supabase
+      .channel(`voda-master-jobs-${currentUser.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_jobs" }, (payload) => {
+        if (payload.eventType === "DELETE") {
+          if (payload.old?.id) setJobs((current) => current.filter((job) => job.id !== payload.old.id));
+          return;
+        }
+        const raw = payload.new;
+        if (!raw?.id) return;
+        const normalized = {
+          id: raw.id,
+          customerName: raw.customer_name || "Unnamed Job",
+          jobNumber: raw.job_number || "",
+          jobType: raw.job_type || "Other",
+          address: raw.address || "",
+          carrier: raw.carrier || "",
+          claimNumber: raw.claim_number || "",
+          assignedEmployeeId: raw.assigned_employee_id || "",
+          status: raw.status || "active",
+          createdAt: raw.created_at,
+        };
+        setJobs((current) => {
+          const without = current.filter((job) => job.id !== normalized.id);
+          return [normalized, ...without];
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (currentUser?.role !== "admin") return undefined;
@@ -1311,8 +1374,10 @@ export default function RestorationHoursTracker() {
       ? supabase.from("portal_messages").select("*").order("created_at", { ascending: false }).limit(25)
       : supabase.from("portal_messages").select("*").or(`recipient_id.eq.${currentUser.id},recipient_id.is.null`).order("created_at", { ascending: false }).limit(12);
     const jobsQuery = isAdmin
-      ? supabase.from("app_jobs").select("*").order("created_at", { ascending: false }).limit(150)
-      : supabase.from("app_jobs").select("*").or(`assigned_employee_id.eq.${currentUser.id},assigned_employee_id.is.null`).neq("status", "closed").order("created_at", { ascending: false }).limit(100);
+      ? supabase.from("app_jobs").select("*").order("created_at", { ascending: false }).limit(250)
+      // Master jobs are shared across the whole team. Employees must see the same job list
+      // so one person's first entry becomes selectable by every other employee.
+      : supabase.from("app_jobs").select("*").neq("status", "closed").order("created_at", { ascending: false }).limit(250);
 
     const [profilesResponse, entriesResponse, messagesResponse, jobsResponse] = await Promise.all([profilesQuery, entriesQuery, messagesQuery, jobsQuery]);
 
@@ -1335,7 +1400,8 @@ export default function RestorationHoursTracker() {
     }));
     setEmployees(mappedEmployees);
     setEmployeeDrafts(Object.fromEntries(mappedEmployees.map((employee) => [employee.id, employee])));
-    setEntries((entriesResponse.data || []).map(normalizeEntry));
+    const normalizedEntries = canonicalizeEntryJobNames((entriesResponse.data || []).map(normalizeEntry));
+    setEntries(normalizedEntries);
     setMessages((messagesResponse.data || []).map((message) => ({
       id: message.id,
       title: message.title || "Portal update",
@@ -1345,7 +1411,10 @@ export default function RestorationHoursTracker() {
       relatedEntryId: message.related_entry_id || null,
       createdAt: message.created_at,
     })));
-    setJobs((jobsResponse.data || []).map((job) => ({ id: job.id, customerName: job.customer_name || "Unnamed Job", jobNumber: job.job_number || "", jobType: job.job_type || "Other", address: job.address || "", carrier: job.carrier || "", claimNumber: job.claim_number || "", assignedEmployeeId: job.assigned_employee_id || "", status: job.status || "active", createdAt: job.created_at })));
+    const knownEntryJobNames = normalizedEntries.map((entry) => entry.customerName).filter(Boolean);
+    const rawJobs = (jobsResponse.data || []).map((job) => ({ id: job.id, customerName: job.customer_name || "Unnamed Job", jobNumber: job.job_number || "", jobType: job.job_type || "Other", address: job.address || "", carrier: job.carrier || "", claimNumber: job.claim_number || "", assignedEmployeeId: job.assigned_employee_id || "", status: job.status || "active", createdAt: job.created_at }));
+    const knownJobNames = [...knownEntryJobNames, ...rawJobs.map((job) => job.customerName)];
+    setJobs(rawJobs.map((job) => ({ ...job, customerName: canonicalJobName(job.customerName, knownJobNames) })));
     supabase.from("time_entry_audit_log").select("*").order("created_at", { ascending: false }).limit(isAdmin ? 100 : 40).then(({ data }) => {
       if (!data?.length) return;
       setAuditEvents(data.map((event) => ({ id: event.id, action: event.action, label: event.label || event.action, detail: event.detail || "", employeeId: event.employee_id, entryId: event.entry_id, createdAt: event.created_at, actorId: event.actor_id })));
@@ -1701,7 +1770,21 @@ export default function RestorationHoursTracker() {
     const queue = [...offlineQueue];
     setOfflineQueue([]);
     for (const item of queue) {
-      const { error } = await supabase.from("time_entries").insert(item);
+      let syncedItem = { ...item };
+      try {
+        const masterJob = await resolveMasterJob(item.customer_name, item.job_type, item.job_id || null);
+        syncedItem = {
+          ...syncedItem,
+          job_id: masterJob.id,
+          customer_name: masterJob.customerName,
+          job_type: masterJob.jobType || item.job_type,
+        };
+      } catch (error) {
+        setOfflineQueue((current) => [...current, item]);
+        setAppError(`An offline entry could not attach to its shared job yet: ${error.message}`);
+        return;
+      }
+      const { error } = await supabase.from("time_entries").insert(syncedItem);
       if (error) {
         setOfflineQueue((current) => [...current, item]);
         setAppError(`Some offline entries could not sync yet: ${error.message}`);
@@ -1793,6 +1876,87 @@ export default function RestorationHoursTracker() {
     URL.revokeObjectURL(url);
   }
 
+  function findMasterJobByName(value, sourceJobs = activeJobs) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const exactKey = jobKey(raw);
+    const exact = sourceJobs.find((job) => jobKey(job.customerName) === exactKey);
+    if (exact) return exact;
+    const likely = sourceJobs.filter((job) => jobNamesLikelySame(raw, job.customerName));
+    if (!likely.length) return null;
+    return likely.sort((a, b) => {
+      const tokenDiff = jobTokens(b.customerName).length - jobTokens(a.customerName).length;
+      if (tokenDiff) return tokenDiff;
+      return String(b.customerName || "").length - String(a.customerName || "").length;
+    })[0];
+  }
+
+  async function resolveMasterJob(customerName, jobType, preferredJobId = null) {
+    const raw = String(customerName || "").trim().replace(/\s+/g, " ");
+    if (!raw) throw new Error("A job/customer name is required.");
+
+    if (preferredJobId) {
+      const selected = jobs.find((job) => String(job.id) === String(preferredJobId));
+      if (selected) return selected;
+    }
+
+    const localMatch = findMasterJobByName(raw, jobs);
+    if (localMatch) return localMatch;
+
+    // Re-check Supabase immediately before creating. This prevents two employees who
+    // submit the same new job at nearly the same time from creating avoidable duplicates.
+    const { data: freshRows, error: lookupError } = await supabase
+      .from("app_jobs")
+      .select("*")
+      .neq("status", "closed")
+      .limit(500);
+    if (!lookupError && freshRows?.length) {
+      const freshJobs = freshRows.map((job) => ({
+        id: job.id,
+        customerName: job.customer_name || "Unnamed Job",
+        jobNumber: job.job_number || "",
+        jobType: job.job_type || "Other",
+        address: job.address || "",
+        carrier: job.carrier || "",
+        claimNumber: job.claim_number || "",
+        assignedEmployeeId: job.assigned_employee_id || "",
+        status: job.status || "active",
+        createdAt: job.created_at,
+      }));
+      const freshMatch = findMasterJobByName(raw, freshJobs);
+      if (freshMatch) return freshMatch;
+    }
+
+    const normalizedName = canonicalJobName(raw, jobs.map((job) => job.customerName));
+    const { data: created, error } = await supabase
+      .from("app_jobs")
+      .insert({
+        customer_name: normalizedName,
+        job_type: jobType || "Other",
+        assigned_employee_id: null,
+        status: "active",
+        created_by: currentUser.id,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+
+    const masterJob = {
+      id: created.id,
+      customerName: created.customer_name || normalizedName,
+      jobNumber: created.job_number || "",
+      jobType: created.job_type || jobType || "Other",
+      address: created.address || "",
+      carrier: created.carrier || "",
+      claimNumber: created.claim_number || "",
+      assignedEmployeeId: created.assigned_employee_id || "",
+      status: created.status || "active",
+      createdAt: created.created_at,
+    };
+    setJobs((current) => [masterJob, ...current.filter((job) => job.id !== masterJob.id)]);
+    return masterJob;
+  }
+
   async function addEntry() {
     if (!currentUser || !form.customerName.trim()) {
       setAppError("Please enter a job name or customer name before adding hours.");
@@ -1803,11 +1967,12 @@ export default function RestorationHoursTracker() {
       return;
     }
     setAppError("");
-    const normalizedCustomerName = canonicalJobName(form.customerName, smartJobSuggestions);
+    let masterJob = findMasterJobByName(form.customerName, jobs);
+    let normalizedCustomerName = masterJob?.customerName || canonicalJobName(form.customerName, smartJobSuggestions);
     const payload = {
       employee_id: currentUser.id,
-      job_id: form.jobId || null,
-      job_type: form.jobType,
+      job_id: masterJob?.id || form.jobId || null,
+      job_type: masterJob?.jobType || form.jobType,
       customer_name: normalizedCustomerName,
       work_date: form.date,
       start_time: form.start,
@@ -1828,6 +1993,16 @@ export default function RestorationHoursTracker() {
       goToSection("timesheets");
       setAppError("You are offline, so this entry was saved locally and will sync when the connection returns.");
       return;
+    }
+
+    try {
+      masterJob = await resolveMasterJob(normalizedCustomerName, form.jobType, form.jobId || masterJob?.id || null);
+      payload.job_id = masterJob.id;
+      payload.job_type = masterJob.jobType || form.jobType;
+      payload.customer_name = masterJob.customerName;
+      normalizedCustomerName = masterJob.customerName;
+    } catch (error) {
+      return setAppError(`Unable to create or select the shared master job: ${error.message}`);
     }
 
     const { error } = await supabase.from("time_entries").insert(payload);
@@ -2315,7 +2490,10 @@ export default function RestorationHoursTracker() {
     if (currentUser?.role !== "admin") return;
     if (!jobForm.customerName.trim()) return setAppError("Add a customer or job name before creating a job.");
     setAppError("");
-    const { error } = await supabase.from("app_jobs").insert({ customer_name: jobForm.customerName.trim(), job_number: jobForm.jobNumber.trim() || null, job_type: jobForm.jobType, address: jobForm.address.trim() || null, carrier: jobForm.carrier.trim() || null, claim_number: jobForm.claimNumber.trim() || null, assigned_employee_id: jobForm.assignedEmployeeId || null, status: "active", created_by: currentUser.id });
+    const existing = findMasterJobByName(jobForm.customerName, jobs);
+    if (existing) return setAppError(`That master job already exists as “${existing.customerName}”. Open the existing job instead of creating a duplicate.`);
+    const normalizedName = canonicalJobName(jobForm.customerName, jobs.map((job) => job.customerName));
+    const { error } = await supabase.from("app_jobs").insert({ customer_name: normalizedName, job_number: jobForm.jobNumber.trim() || null, job_type: jobForm.jobType, address: jobForm.address.trim() || null, carrier: jobForm.carrier.trim() || null, claim_number: jobForm.claimNumber.trim() || null, assigned_employee_id: jobForm.assignedEmployeeId || null, status: "active", created_by: currentUser.id });
     if (error) return setAppError(error.message);
     setJobForm({ customerName: "", jobNumber: "", jobType: jobTypes[0], address: "", carrier: "", claimNumber: "", assignedEmployeeId: "" });
     await loadAppData();
@@ -2436,7 +2614,7 @@ export default function RestorationHoursTracker() {
           <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
             <div className="col-span-2 flex items-center gap-2 rounded-2xl border border-white/70 bg-slate-50/75 px-3 py-2.5 text-xs font-bold shadow-sm sm:col-span-1 sm:text-sm dark:border-white/10 dark:bg-white/10">
               <AvatarBadge person={currentUser} />
-              <div className="min-w-0 break-words leading-tight"><span>{currentUser.name}</span><span className="mx-2 text-slate-300">/</span><span className="capitalize text-cyan-600 dark:text-cyan-300">{currentUser.role}</span></div>
+              <div className="min-w-0 leading-tight"><span className="employee-name-inline">{currentUser.name}</span><span className="mx-2 text-slate-300">/</span><span className="capitalize text-cyan-600 dark:text-cyan-300">{currentUser.role}</span></div>
             </div>
             <Button variant="outline" aria-label="Settings" onClick={() => setSettingsOpen(true)} className="gap-1.5"><Settings className="h-4 w-4" /><span className="hidden sm:inline">Settings</span></Button>
             <Button variant="outline" onClick={() => setDarkMode((value) => !value)} className="gap-2">
@@ -2711,8 +2889,17 @@ export default function RestorationHoursTracker() {
                     <input
                       list="weekly-job-suggestions"
                       value={form.customerName}
-                      onChange={(e) => setForm({ ...form, customerName: e.target.value, jobId: "" })}
-                      onBlur={() => setForm((current) => ({ ...current, customerName: canonicalJobName(current.customerName, smartJobSuggestions) }))}
+                      onChange={(e) => {
+                        const typed = e.target.value;
+                        const matched = findMasterJobByName(typed, activeJobs);
+                        setForm({ ...form, customerName: typed, jobId: matched?.id || "" });
+                      }}
+                      onBlur={() => setForm((current) => {
+                        const matched = findMasterJobByName(current.customerName, activeJobs);
+                        return matched
+                          ? { ...current, customerName: matched.customerName, jobId: matched.id, jobType: matched.jobType || current.jobType }
+                          : { ...current, customerName: canonicalJobName(current.customerName, smartJobSuggestions), jobId: "" };
+                      })}
                       autoComplete="off"
                       className="input"
                       placeholder="Example: Smith Residence"
@@ -2723,12 +2910,23 @@ export default function RestorationHoursTracker() {
                     {smartJobSuggestions.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {smartJobSuggestions.slice(0, 6).map((job) => (
-                          <button key={job} type="button" onClick={() => setForm({ ...form, customerName: job, jobId: "" })} className="bubble-fit rounded-full border border-cyan-200/70 bg-cyan-50/80 px-2.5 py-1.5 text-[10px] font-black text-cyan-800 transition hover:-translate-y-0.5 hover:bg-cyan-100 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200">
+                          <button key={job} type="button" onClick={() => {
+                            const matched = findMasterJobByName(job, activeJobs);
+                            setForm({ ...form, customerName: matched?.customerName || job, jobId: matched?.id || "", jobType: matched?.jobType || form.jobType });
+                          }} className="bubble-fit rounded-full border border-cyan-200/70 bg-cyan-50/80 px-2.5 py-1.5 text-[10px] font-black text-cyan-800 transition hover:-translate-y-0.5 hover:bg-cyan-100 dark:border-cyan-300/15 dark:bg-cyan-400/10 dark:text-cyan-200">
                             {job}
                           </button>
                         ))}
                       </div>
                     )}
+                    {form.customerName.trim() && (() => {
+                      const matched = findMasterJobByName(form.customerName, activeJobs);
+                      return matched ? (
+                        <p className="mt-2 text-xs font-black text-emerald-700 dark:text-emerald-300">Shared master job • {matched.customerName}</p>
+                      ) : (
+                        <p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">New job • submitting these hours will create this job for the whole team to reuse.</p>
+                      );
+                    })()}
                     {weeklyJobSuggestions.length > 0 && <p className="mt-2 text-xs font-bold text-cyan-700 dark:text-cyan-300">Suggested from jobs entered recently.</p>}
                   </Field></div>
                   <Field label="Start Time"><input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} className="input" /></Field>
@@ -3033,8 +3231,8 @@ function ManagerDashboard({ employees, entries, activeJobs, liveShifts, liveShif
               <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{overtimeAttention.length + noActivityEmployees.length}</span>
             </summary>
             <div className="space-y-2 border-t border-slate-200/70 px-3.5 py-2.5 dark:border-white/10">
-              {overtimeAttention.map((employee) => <div key={`ot-${employee.id}`} className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{employee.name}</span><span className="shrink-0 whitespace-nowrap font-black text-amber-600 dark:text-amber-300">{employee.hours.toFixed(1)}h this week</span></div>)}
-              {noActivityEmployees.map((employee) => <div key={`missing-${employee.id}`} className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-bold">{employee.name}</span><span className="shrink-0 whitespace-nowrap font-black text-red-600 dark:text-red-300">No activity today</span></div>)}
+              {overtimeAttention.map((employee) => <div key={`ot-${employee.id}`} className="flex items-center justify-between gap-3 text-xs"><span className="employee-name-chip min-w-0 truncate text-xs font-black">{employee.name}</span><span className="shrink-0 whitespace-nowrap font-black text-amber-600 dark:text-amber-300">{employee.hours.toFixed(1)}h this week</span></div>)}
+              {noActivityEmployees.map((employee) => <div key={`missing-${employee.id}`} className="flex items-center justify-between gap-3 text-xs"><span className="employee-name-chip min-w-0 truncate text-xs font-black">{employee.name}</span><span className="shrink-0 whitespace-nowrap font-black text-red-600 dark:text-red-300">No activity today</span></div>)}
             </div>
           </details>}
         </div>
@@ -3143,10 +3341,14 @@ function AdminReportsPanel({ entries, employees, employeeById, weekStart, setWee
   const [jobSearch, setJobSearch] = useState("");
   const dateKeys = new Set([...weekDates, ...weekTwoDates].map((date) => formatDate(date)));
   const periodEntries = sortEntriesByDateTime(entries.filter((entry) => dateKeys.has(entry.date) && !isDeniedEntry(entry)));
+  const allValidEntries = sortEntriesByDateTime(entries.filter((entry) => !isDeniedEntry(entry)));
+  const allKnownJobNames = [...new Set(allValidEntries.map((entry) => String(entry.customerName || "").trim()).filter(Boolean))];
   const activeEmployees = employees.filter((person) => person.active !== false && person.role !== "admin");
 
-  const jobs = Object.values(periodEntries.reduce((acc, entry) => {
-    const displayName = String(entry.customerName || "Unnamed Job").trim();
+  // Job drill-down is intentionally ALL-TIME. Admins can click a job once and see
+  // every day and every employee who has ever logged hours to that customer/job.
+  const jobs = Object.values(allValidEntries.reduce((acc, entry) => {
+    const displayName = canonicalJobName(entry.customerName || "Unnamed Job", allKnownJobNames);
     const key = jobKey(displayName);
     if (!acc[key]) acc[key] = { key, name: displayName, total: 0, entries: [], employees: {}, dates: {} };
     const hours = entryHours(entry);
@@ -3176,7 +3378,7 @@ function AdminReportsPanel({ entries, employees, employeeById, weekStart, setWee
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Admin reports</p>
               <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">Labor by job & employee</h2>
-              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Exact two-week labor reporting. Expand any job to see every employee, work date, job type, entry and hour total.</p>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Employee payroll reports follow the selected two-week period. Job names are clickable and show the complete job history across every employee and every day worked.</p>
               <p className="mt-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-200">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -3190,7 +3392,7 @@ function AdminReportsPanel({ entries, employees, employeeById, weekStart, setWee
         <div className="space-y-5 p-4 sm:p-5">
           <section>
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Job breakdown</p><h3 className="text-xl font-black tracking-[-0.04em]">Every job in this pay period</h3></div>
+              <div><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Job breakdown · all time</p><h3 className="text-xl font-black tracking-[-0.04em]">Click a job for its complete labor history</h3></div>
               <div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={jobSearch} onChange={(e) => setJobSearch(e.target.value)} className="input pl-11" placeholder="Search jobs..." /></div>
             </div>
             <div className="space-y-3">
@@ -3200,12 +3402,12 @@ function AdminReportsPanel({ entries, employees, employeeById, weekStart, setWee
                 const dateRows = Object.values(job.dates).sort((a,b) => a.date.localeCompare(b.date));
                 return <article key={job.key} className="overflow-hidden rounded-[1.6rem] border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
                   <button type="button" onClick={() => setExpandedJobs((current) => ({ ...current, [job.key]: !open }))} className="flex w-full min-w-0 items-center justify-between gap-3 p-4 text-left sm:p-5">
-                    <div className="min-w-0"><p className="break-words text-base font-black text-slate-950 dark:text-white">{job.name}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.entries.length} entries · {employeeRows.length} employee{employeeRows.length === 1 ? "" : "s"} · {dateRows.length} work day{dateRows.length === 1 ? "" : "s"}</p></div>
+                    <div className="min-w-0"><p className="job-name-link text-base font-black text-slate-950 dark:text-white">{job.name}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.entries.length} entries · {employeeRows.length} employee{employeeRows.length === 1 ? "" : "s"} · {dateRows.length} work day{dateRows.length === 1 ? "" : "s"} · all recorded history</p></div>
                     <div className="flex shrink-0 items-center gap-2"><span className="rounded-full bg-cyan-50 px-3 py-1.5 text-sm font-black text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{job.total.toFixed(2)} hrs</span>{open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</div>
                   </button>
                   {open && <div className="border-t border-slate-100 p-4 dark:border-white/10 sm:p-5">
                     <div className="grid gap-4 lg:grid-cols-2">
-                      <div><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Employees on this job</p><div className="space-y-2">{employeeRows.map((row) => <div key={row.id} className="rounded-2xl bg-slate-50 p-3 dark:bg-white/5"><div className="flex items-center justify-between gap-3"><span className="min-w-0 break-words text-sm font-black">{row.name}</span><span className="shrink-0 text-sm font-black text-cyan-700 dark:text-cyan-300">{row.total.toFixed(2)} hrs</span></div><div className="mt-2 space-y-1">{row.entries.map((entry) => <div key={entry.id} className="flex flex-wrap justify-between gap-x-3 text-xs font-semibold text-slate-500 dark:text-slate-400"><span>{displayShortDate(entry.date)} · {entry.jobType || "Job"}</span><span>{entryHours(entry).toFixed(2)} hrs</span></div>)}</div></div>)}</div></div>
+                      <div><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Employees on this job</p><div className="space-y-2">{employeeRows.map((row) => <div key={row.id} className="rounded-2xl bg-slate-50 p-3 dark:bg-white/5"><div className="flex items-center justify-between gap-3"><span className="employee-name-chip min-w-0 text-sm font-black">{row.name}</span><span className="shrink-0 text-sm font-black text-cyan-700 dark:text-cyan-300">{row.total.toFixed(2)} hrs</span></div><div className="mt-2 space-y-1">{row.entries.map((entry) => <div key={entry.id} className="flex flex-wrap justify-between gap-x-3 text-xs font-semibold text-slate-500 dark:text-slate-400"><span>{displayShortDate(entry.date)} · {entry.jobType || "Job"}</span><span>{entryHours(entry).toFixed(2)} hrs</span></div>)}</div></div>)}</div></div>
                       <div><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Daily job totals</p><div className="space-y-2">{dateRows.map((day) => <div key={day.date} className="rounded-2xl bg-slate-50 p-3 dark:bg-white/5"><div className="flex justify-between gap-3"><span className="text-sm font-black">{displayDate(day.date)}</span><span className="text-sm font-black text-cyan-700 dark:text-cyan-300">{day.total.toFixed(2)} hrs</span></div><p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{day.entries.length} entr{day.entries.length === 1 ? "y" : "ies"}</p></div>)}</div></div>
                     </div>
                   </div>}
@@ -3217,7 +3419,7 @@ function AdminReportsPanel({ entries, employees, employeeById, weekStart, setWee
           <section className="rounded-[1.65rem] border border-slate-200 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5 sm:p-5">
             <div className="mb-3"><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Employee hours reports</p><h3 className="text-xl font-black tracking-[-0.04em]">Print an individual employee report</h3><p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Each report is limited to this two-week pay period and groups that employee’s jobs together by work day.</p></div>
             <div className="grid gap-2 lg:grid-cols-2">
-              {employeeSummaries.map(({ person, summary, jobs }) => <div key={person.id} className="flex min-w-0 flex-col gap-3 rounded-3xl border border-slate-100 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-slate-950/25 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="break-words font-black">{person.name}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{summary.totalHours.toFixed(2)} hrs · {summary.regularHours.toFixed(2)} regular · {summary.overtimeHours.toFixed(2)} OT · {jobs} job{jobs === 1 ? "" : "s"}</p></div><Button type="button" variant="outline" onClick={() => exportPayrollPdf(person.id)} className="shrink-0"><FileText className="mr-2 h-4 w-4" /> Print Hours Report</Button></div>)}
+              {employeeSummaries.map(({ person, summary, jobs }) => <div key={person.id} className="employee-report-card min-w-0 rounded-3xl border border-slate-100 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-slate-950/25"><div className="min-w-0"><p className="employee-name-chip inline-flex max-w-full text-sm font-black sm:text-base">{person.name}</p><p className="mt-2 text-xs font-bold leading-5 text-slate-500 dark:text-slate-400"><span className="whitespace-nowrap">{summary.totalHours.toFixed(2)} hrs</span><span aria-hidden="true"> · </span><span className="whitespace-nowrap">{summary.regularHours.toFixed(2)} regular</span><span aria-hidden="true"> · </span><span className="whitespace-nowrap">{summary.overtimeHours.toFixed(2)} OT</span><span aria-hidden="true"> · </span><span className="whitespace-nowrap">{jobs} job{jobs === 1 ? "" : "s"}</span></p></div><Button type="button" variant="outline" onClick={() => exportPayrollPdf(person.id)} className="mt-3 w-full sm:mt-0 sm:w-auto sm:shrink-0"><FileText className="mr-2 h-4 w-4" /> Print Hours Report</Button></div>)}
             </div>
           </section>
         </div>
@@ -3294,7 +3496,7 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
             <section className="rounded-[1.65rem] border border-white/70 bg-white/72 p-4 shadow-sm ring-1 ring-white/70 dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
               <div className="mb-3"><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Job labor report</p><h3 className="text-lg font-black tracking-[-0.03em]">Hours automatically totaled by job</h3></div>
               <div className="grid gap-2 lg:grid-cols-2">
-                {laborByJob.map((job) => <div key={jobKey(job.name)} className="min-w-0 rounded-3xl border border-slate-100 bg-white p-4 dark:border-white/10 dark:bg-slate-950/30"><div className="flex min-w-0 items-start justify-between gap-3"><p className="min-w-0 truncate font-black" title={job.name}>{job.name}</p><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{job.total.toFixed(2)}h</span></div><div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(job.employees).sort((a,b) => b[1]-a[1]).map(([name,hours]) => <span key={name} className="max-w-full rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-white/5 dark:text-slate-300"><span className="inline-block max-w-[13rem] truncate align-bottom">{name}</span> · {hours.toFixed(2)}h</span>)}</div></div>)}
+                {laborByJob.map((job) => <div key={jobKey(job.name)} className="min-w-0 rounded-3xl border border-slate-100 bg-white p-4 dark:border-white/10 dark:bg-slate-950/30"><div className="flex min-w-0 items-start justify-between gap-3"><p className="min-w-0 truncate font-black" title={job.name}>{job.name}</p><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{job.total.toFixed(2)}h</span></div><div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(job.employees).sort((a,b) => b[1]-a[1]).map(([name,hours]) => <span key={name} className="max-w-full rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-white/5 dark:text-slate-300"><span className="employee-name-inline inline-block max-w-[13rem] truncate align-bottom">{name}</span> · {hours.toFixed(2)}h</span>)}</div></div>)}
               </div>
             </section>
           )}
@@ -3319,7 +3521,7 @@ function DocumentationWeek({ title, entries, getName, openDayDetail }) {
         {entries.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-white/60 p-6 text-center text-sm font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">No entries found for this week.</div> : entries.map((entry) => (
           <article key={entry.id} className={cx("rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/30", isDeniedEntry(entry) && "opacity-60 grayscale")}>
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><p className="text-sm font-black text-slate-950 dark:text-white">{entry.customerName}</p><p className="mt-0.5 text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType} · {getName(entry.employeeId)}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p></div>
+              <div className="min-w-0"><p className="text-sm font-black text-slate-950 dark:text-white">{entry.customerName}</p><p className="mt-0.5 text-xs font-bold text-cyan-700 dark:text-cyan-300">{entry.jobType} · <span className="employee-name-inline">{getName(entry.employeeId)}</span></p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{displayDate(entry.date)} · {entry.start}–{entry.end} · {entryHours(entry).toFixed(2)} hrs</p></div>
               <StatusPill status={entry.approvalStatus} />
             </div>
             <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
@@ -3513,7 +3715,7 @@ function SettingsModal({ currentUser, profileForm, setProfileForm, setSettingsOp
         <div className="mb-5 flex items-center gap-4 rounded-3xl border border-white/70 bg-white/75 p-4 dark:border-white/10 dark:bg-white/5">
           <AvatarBadge person={previewUser} size="lg" />
           <div>
-            <p className="text-lg font-black">{previewUser.name}</p>
+            <p><span className="employee-name-chip inline-flex text-lg font-black">{previewUser.name}</span></p>
             <p className="text-sm font-bold text-slate-500 dark:text-slate-400">{currentUser.email}</p>
             <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">{currentUser.role}</p>
           </div>
@@ -3582,7 +3784,7 @@ function EditHoursModal({ editModal, setEditModal, saveEditedHours }) {
   return (
     <div className="native-sheet fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center">
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/70 bg-slate-50/92 p-5 shadow-2xl shadow-slate-950/20 ring-1 ring-white/80 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/92 dark:ring-white/10">
-        <div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Admin hour correction</p><h2 className="mt-1 text-2xl font-black tracking-[-0.03em]">Edit / move employee hours</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">{editModal.employeeName}</p></div><Button variant="ghost" onClick={() => setEditModal(null)}><X className="h-5 w-5" /></Button></div>
+        <div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">Admin hour correction</p><h2 className="mt-1 text-2xl font-black tracking-[-0.03em]">Edit / move employee hours</h2><p className="mt-2"><span className="employee-name-chip text-sm font-black">{editModal.employeeName}</span></p></div><Button variant="ghost" onClick={() => setEditModal(null)}><X className="h-5 w-5" /></Button></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Move To Date"><input type="date" value={editModal.date} onChange={(e) => setEditModal({ ...editModal, date: e.target.value })} className="input" /></Field>
           <Field label="Job Type"><select value={editModal.jobType} onChange={(e) => setEditModal({ ...editModal, jobType: e.target.value })} className="input">{jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
