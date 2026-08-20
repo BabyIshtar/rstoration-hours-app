@@ -1420,3 +1420,19 @@ button, .bubble-fit {
   .manage-hero-stat span { font-size: 8px; letter-spacing: .04em; }
   .manage-hero-stat strong { font-size: 1rem; }
 }
+
+/* Final dropdown + employee management polish */
+select.input, select { color-scheme: light; appearance: auto; -webkit-appearance: menulist; text-overflow: ellipsis; }
+.light select, .light select.input { color-scheme: light !important; background-color: #fff !important; color: #172238 !important; }
+.light select option, .light select optgroup { background: #fff !important; color: #172238 !important; }
+.dark select, .dark select.input { color-scheme: dark !important; background-color: #0b111c !important; color: #f8fafc !important; }
+.dark select option, .dark select optgroup { background: #0b111c !important; color: #f8fafc !important; }
+select:disabled { opacity: .62; }
+.manage-view-switch { position: sticky; top: 5.5rem; z-index: 10; backdrop-filter: blur(16px) saturate(135%); }
+.employee-job-picker { max-height: min(58vh, 560px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.employee-job-picker-button { contain: content; }
+.employee-job-detail { min-width: 0; }
+.light .employee-job-detail, .light .employee-job-picker-button { background: rgba(255,255,255,.97) !important; border-color: rgba(15,23,42,.12) !important; }
+.dark .employee-job-detail, .dark .employee-job-picker-button { background: rgba(10,16,26,.9) !important; border-color: rgba(148,163,184,.14) !important; }
+@media (max-width: 1023px) { .manage-view-switch { top: 4.7rem; } .employee-job-picker { max-height: 280px; } }
+@media (max-width: 640px) { .manage-view-switch { top: 4.2rem; } .employee-job-picker { max-height: 240px; } .employee-job-picker-button { padding: .8rem !important; } .employee-job-detail { padding: .9rem !important; } }
