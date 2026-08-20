@@ -1224,3 +1224,44 @@ header button span {
   .manager-disclosure summary { min-height:44px !important; padding:.55rem .7rem !important; }
   .manager-disclosure > div { padding:.6rem .7rem !important; }
 }
+
+/* Final production interaction + Android pass */
+.native-sheet {
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+.native-sheet > * {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+}
+html, body, #root {
+  min-height: 100%;
+  min-height: 100dvh;
+}
+body {
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+.bubble-fit,
+button,
+label,
+select,
+.input {
+  min-width: 0;
+}
+button, .bubble-fit {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+@media (max-width: 640px) {
+  .native-sheet > * { max-height: 90dvh !important; }
+  .input, select, button { max-width: 100%; }
+}
+@media (hover: none) and (pointer: coarse) {
+  /* Heavy blur is expensive in Android WebView; keep the same glass feel with less GPU cost. */
+  .native-sheet, .mobile-more-backdrop { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .native-sheet > *, .mobile-more-sheet, header { backdrop-filter: blur(14px) saturate(125%); -webkit-backdrop-filter: blur(14px) saturate(125%); }
+  button:hover { transform: none; }
+}

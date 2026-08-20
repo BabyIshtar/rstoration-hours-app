@@ -50,6 +50,9 @@ const jobTypes = [
   "Storm Damage",
   "Reconstruction / Repairs",
   "Inspection / Estimate",
+  "Carpet Cleaning",
+  "Upholstery Cleaning",
+  "Water Extraction",
   "Other",
 ];
 
@@ -205,6 +208,29 @@ function getSmartJobSuggestions(entries = [], activeJobs = [], selectedDate, cur
     .map((job) => String(job.customerName || job.name || job.title || "").trim())
     .filter(Boolean);
   return [...new Set([...weekly, ...active])].sort((a, b) => a.localeCompare(b));
+}
+
+function jobKey(value = "") {
+  return String(value).toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function canonicalJobName(value, suggestions = []) {
+  const raw = String(value || "").trim().replace(/\s+/g, " ");
+  if (!raw) return "";
+  const key = jobKey(raw);
+  const exact = suggestions.find((name) => jobKey(name) === key);
+  if (exact) return exact;
+  // Only consolidate very close variants; never merge genuinely different customer jobs.
+  const tokens = key.split(" ").filter(Boolean);
+  const close = suggestions.find((name) => {
+    const other = jobKey(name);
+    const otherTokens = other.split(" ").filter(Boolean);
+    if (!tokens.length || !otherTokens.length) return false;
+    const shared = tokens.filter((token) => otherTokens.includes(token)).length;
+    const similarity = shared / Math.max(tokens.length, otherTokens.length);
+    return similarity >= 0.8 && Math.abs(key.length - other.length) <= 8;
+  });
+  return close || raw;
 }
 
 
@@ -992,6 +1018,24 @@ export default function RestorationHoursTracker() {
     () => getSmartJobSuggestions(entries, activeJobs, form.date, currentUser, selectedEmployeeId),
     [entries, activeJobs, form.date, currentUser, selectedEmployeeId]
   );
+  const hasOpenSheet = Boolean(reviewModal || editModal || dayDetail || settingsOpen || nextJobOpen || stoppedShiftReview);
+  useEffect(() => {
+    if (!hasOpenSheet) return undefined;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const previous = { position: body.style.position, top: body.style.top, width: body.style.width, overflow: body.style.overflow };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+    return () => {
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.width = previous.width;
+      body.style.overflow = previous.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [hasOpenSheet]);
   const weekDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index)), [weekStart]);
   const weekTwoDates = useMemo(() => weekdays.map((_, index) => addDays(weekStart, index + 7)), [weekStart]);
   const payPeriodDates = useMemo(() => [...weekDates, ...weekTwoDates], [weekDates, weekTwoDates]);
@@ -1681,18 +1725,29 @@ export default function RestorationHoursTracker() {
     const employeeName = (entry) => employeeById.get(entry.employeeId)?.name || currentUser?.name || "Employee";
     const timeRange = (entry) => `${entry.start || "--:--"} - ${entry.end || "--:--"}`;
 
-    const renderRows = (weekEntries) => weekEntries.map((entry) => {
-      const notes = String(entry.notes || "").trim();
-      return `<tr class="job-row">
-        <td><b>${escapeHtml(employeeName(entry))}</b><small>${escapeHtml(entry.jobType || "Job")}</small></td>
-        <td>${escapeHtml(displayShortDate(entry.date))}</td>
-        <td><b>${escapeHtml(entry.customerName || "Unnamed Job")}</b></td>
-        <td>${escapeHtml(timeRange(entry))}</td>
-        <td class="hours">${entryHours(entry).toFixed(2)}</td>
-        <td><span class="status ${escapeHtml(String(entry.approvalStatus || "pending").toLowerCase())}">${escapeHtml(entry.approvalStatus || "pending")}</span></td>
-      </tr>
-      <tr class="notes-row"><td colspan="6"><div class="inline-notes"><small>Job Notes</small><p>${notes ? escapeHtml(notes) : "No notes submitted."}</p></div></td></tr>`;
-    }).join("");
+    const renderRows = (weekEntries) => {
+      const days = new Map();
+      weekEntries.forEach((entry) => {
+        if (!days.has(entry.date)) days.set(entry.date, []);
+        days.get(entry.date).push(entry);
+      });
+      return [...days.entries()].map(([date, dayEntries]) => {
+        const dayTotal = dayEntries.reduce((sum, entry) => sum + entryHours(entry), 0);
+        const rows = dayEntries.map((entry) => {
+          const notes = String(entry.notes || "").trim();
+          return `<tr class="job-row">
+            <td><b>${escapeHtml(employeeName(entry))}</b><small>${escapeHtml(entry.jobType || "Job")}</small></td>
+            <td></td>
+            <td><b>${escapeHtml(entry.customerName || "Unnamed Job")}</b></td>
+            <td>${escapeHtml(timeRange(entry))}</td>
+            <td class="hours">${entryHours(entry).toFixed(2)}</td>
+            <td><span class="status ${escapeHtml(String(entry.approvalStatus || "pending").toLowerCase())}">${escapeHtml(entry.approvalStatus || "pending")}</span></td>
+          </tr>
+          <tr class="notes-row"><td colspan="6"><div class="inline-notes"><small>Job Notes</small><p>${notes ? escapeHtml(notes) : "No notes submitted."}</p></div></td></tr>`;
+        }).join("");
+        return `<tr class="day-header"><td colspan="6"><b>${escapeHtml(displayShortDate(date))}</b><span>${dayEntries.length} job${dayEntries.length === 1 ? "" : "s"} • ${dayTotal.toFixed(2)} hrs</span></td></tr>${rows}`;
+      }).join("");
+    };
 
     const renderWeek = (label, range, entries, summary) => `
       <section class="week">
@@ -1718,7 +1773,7 @@ export default function RestorationHoursTracker() {
     const payrollFilename = `${firstName}_${lastName}_${formatDate(weekStart)}_Payroll`;
 
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${payrollFilename}</title><style>
-      *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;margin:0;background:#f5f8fa;color:#0f172a;padding:28px}.sheet{max-width:1180px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a 0%,#173a44 52%,#0e7490 100%);color:white;border-radius:30px;padding:30px;box-shadow:0 22px 70px rgba(15,23,42,.18)}.pill{display:inline-flex;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:8px 13px;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}h1{margin:16px 0 8px;font-size:36px;letter-spacing:-.055em;line-height:1}.subtitle{margin:0;color:#d7fbff;font-weight:750}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:18px 0 10px}.box{background:white;border:1px solid #e2e8f0;border-radius:22px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.06)}.box small,.week-total small,td small{display:block;color:#64748b;font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase}.box b{display:block;margin-top:5px;font-size:22px;letter-spacing:-.04em}.box.ot-zero b{color:#64748b}.week{break-inside:avoid;margin-top:24px;background:white;border:1px solid #dbeafe;border-radius:26px;padding:18px;box-shadow:0 12px 36px rgba(15,23,42,.07)}.week-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.week-title p{margin:0;color:#0891b2;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}.week-title h2{margin:4px 0 0;font-size:24px;letter-spacing:-.05em}.week-total{text-align:right;background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:10px 12px;min-width:150px}.week-total b{font-size:18px}table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;overflow:hidden;border-radius:18px;border:1px solid #e2e8f0}th{background:#0f172a;color:white;text-align:left;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:11px 10px}td{vertical-align:top;border-top:1px solid #e2e8f0;padding:12px 10px;font-size:12px;line-height:1.45;color:#1e293b;overflow-wrap:anywhere;word-break:normal}td:nth-child(1){width:17%}td:nth-child(2){width:10%}td:nth-child(3){width:18%}td:nth-child(4){width:11%}.hours{width:9%;font-weight:950;color:#0e7490}.status{display:inline-block;border-radius:999px;padding:5px 8px;font-size:9px;text-transform:uppercase;font-weight:950;background:#fef3c7;color:#92400e}.status.approved{background:#dcfce7;color:#166534}.status.denied{background:#fee2e2;color:#991b1b}.job-row td{border-bottom:0}.notes-row td{padding:0 10px 12px;background:#fbfdff}.inline-notes{border-left:3px solid #22d3ee;background:#f1f5f9;border-radius:12px;padding:10px 12px}.inline-notes small{margin-bottom:4px}.inline-notes p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;color:#0f172a}.empty{text-align:center;color:#64748b;font-weight:800;padding:22px}.foot{margin:18px 0;color:#64748b;font-size:11px;font-weight:700}.no-print{display:block;margin-top:18px;color:#64748b;font-size:12px;font-weight:700}@media print{body{background:white;padding:0}.hero,.box,.week{box-shadow:none}.no-print{display:none}.sheet{max-width:none}.summary{grid-template-columns:repeat(3,1fr)}.week{page-break-inside:avoid}}@media(max-width:800px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.week-title{align-items:flex-start;flex-direction:column}.week-total{text-align:left}table{table-layout:auto}.inline-notes{min-width:0}}
+      *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;margin:0;background:#f5f8fa;color:#0f172a;padding:28px}.sheet{max-width:1180px;margin:0 auto}.hero{background:linear-gradient(135deg,#0f172a 0%,#173a44 52%,#0e7490 100%);color:white;border-radius:30px;padding:30px;box-shadow:0 22px 70px rgba(15,23,42,.18)}.pill{display:inline-flex;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);border-radius:999px;padding:8px 13px;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}h1{margin:16px 0 8px;font-size:36px;letter-spacing:-.055em;line-height:1}.subtitle{margin:0;color:#d7fbff;font-weight:750}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:18px 0 10px}.box{background:white;border:1px solid #e2e8f0;border-radius:22px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.06)}.box small,.week-total small,td small{display:block;color:#64748b;font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase}.box b{display:block;margin-top:5px;font-size:22px;letter-spacing:-.04em}.box.ot-zero b{color:#64748b}.week{break-inside:avoid;margin-top:24px;background:white;border:1px solid #dbeafe;border-radius:26px;padding:18px;box-shadow:0 12px 36px rgba(15,23,42,.07)}.week-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.week-title p{margin:0;color:#0891b2;font-size:11px;font-weight:950;letter-spacing:.18em;text-transform:uppercase}.week-title h2{margin:4px 0 0;font-size:24px;letter-spacing:-.05em}.week-total{text-align:right;background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:10px 12px;min-width:150px}.week-total b{font-size:18px}table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;overflow:hidden;border-radius:18px;border:1px solid #e2e8f0}th{background:#0f172a;color:white;text-align:left;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:11px 10px}td{vertical-align:top;border-top:1px solid #e2e8f0;padding:12px 10px;font-size:12px;line-height:1.45;color:#1e293b;overflow-wrap:anywhere;word-break:normal}td:nth-child(1){width:17%}td:nth-child(2){width:10%}td:nth-child(3){width:18%}td:nth-child(4){width:11%}.hours{width:9%;font-weight:950;color:#0e7490}.status{display:inline-block;border-radius:999px;padding:5px 8px;font-size:9px;text-transform:uppercase;font-weight:950;background:#fef3c7;color:#92400e}.status.approved{background:#dcfce7;color:#166534}.status.denied{background:#fee2e2;color:#991b1b}.day-header td{background:#eef6f8;border-top:1px solid #cbd5e1;padding:10px 12px}.day-header b{font-size:13px}.day-header span{margin-left:10px;color:#64748b;font-size:10px;font-weight:900}.job-row td{border-bottom:0}.notes-row td{padding:0 10px 12px;background:#fbfdff}.inline-notes{border-left:3px solid #22d3ee;background:#f1f5f9;border-radius:12px;padding:10px 12px}.inline-notes small{margin-bottom:4px}.inline-notes p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;color:#0f172a}.empty{text-align:center;color:#64748b;font-weight:800;padding:22px}.foot{margin:18px 0;color:#64748b;font-size:11px;font-weight:700}.no-print{display:block;margin-top:18px;color:#64748b;font-size:12px;font-weight:700}@media print{body{background:white;padding:0}.hero,.box,.week{box-shadow:none}.no-print{display:none}.sheet{max-width:none}.summary{grid-template-columns:repeat(3,1fr)}.week{page-break-inside:avoid}}@media(max-width:800px){body{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.week-title{align-items:flex-start;flex-direction:column}.week-total{text-align:left}table{table-layout:auto}.inline-notes{min-width:0}}
     </style></head><body><main class="sheet"><section class="hero"><span class="pill">VODA Of Tucson</span><h1>Hours Report</h1><p class="subtitle">Two-week pay period: ${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 13))} • Submitted and approved hours • Phoenix time</p></section><section class="summary"><div class="box"><small>Week 1</small><b>${weekOneSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Week 2</small><b>${weekTwoSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Period Total</small><b>${reportPeriodSummary.totalHours.toFixed(2)}h</b></div><div class="box"><small>Regular</small><b>${reportPeriodSummary.regularHours.toFixed(2)}h</b></div><div class="box ${reportPeriodSummary.overtimeHours <= 0 ? "ot-zero" : ""}"><small>Overtime</small><b>${reportPeriodSummary.overtimeHours.toFixed(2)}h</b></div><div class="box"><small>Vacation</small><b>${reportPeriodSummary.vacationHours.toFixed(2)}h</b></div></section>${renderWeek(`Week 1`, `${displayShortDate(weekStart)} - ${displayShortDate(addDays(weekStart, 6))}`, reportWeekOne, weekOneSummary)}${renderWeek(`Week 2`, `${displayShortDate(addDays(weekStart, 7))} - ${displayShortDate(addDays(weekStart, 13))}`, reportWeekTwo, weekTwoSummary)}<p class="foot">Overtime is calculated per employee per week only after 40 worked hours. Vacation/PTO is tracked separately and does not create overtime.</p><p class="no-print">Use your browser print option and select Save as PDF.</p></main></body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
@@ -1739,11 +1794,12 @@ export default function RestorationHoursTracker() {
       return;
     }
     setAppError("");
+    const normalizedCustomerName = canonicalJobName(form.customerName, smartJobSuggestions);
     const payload = {
       employee_id: currentUser.id,
       job_id: form.jobId || null,
       job_type: form.jobType,
-      customer_name: form.customerName.trim(),
+      customer_name: normalizedCustomerName,
       work_date: form.date,
       start_time: form.start,
       end_time: form.end,
@@ -1767,8 +1823,8 @@ export default function RestorationHoursTracker() {
 
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) return setAppError(error.message);
-    await recordAudit({ action: "submit", label: "Hours submitted", detail: `${form.customerName.trim()} · ${displayDate(form.date)} · ${entryHours(form).toFixed(2)}h`, employeeId: currentUser.id });
-    notifyUser("Hours submitted", `${form.customerName.trim()} was added to your timesheet.`);
+    await recordAudit({ action: "submit", label: "Hours submitted", detail: `${normalizedCustomerName} · ${displayDate(form.date)} · ${entryHours(form).toFixed(2)}h`, employeeId: currentUser.id });
+    notifyUser("Hours submitted", `${normalizedCustomerName} was added to your timesheet.`);
     setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
     localStorage.removeItem(`vodaEntryDraft:${currentUser.id}`);
     goToSection("timesheets");
@@ -2647,6 +2703,8 @@ export default function RestorationHoursTracker() {
                       list="weekly-job-suggestions"
                       value={form.customerName}
                       onChange={(e) => setForm({ ...form, customerName: e.target.value, jobId: "" })}
+                      onBlur={() => setForm((current) => ({ ...current, customerName: canonicalJobName(current.customerName, smartJobSuggestions) }))}
+                      autoComplete="off"
                       className="input"
                       placeholder="Example: Smith Residence"
                     />
@@ -3072,6 +3130,16 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
     return { date, dateKey, entries: visibleEntries.filter((entry) => entry.date === dateKey) };
   }).filter((group) => group.entries.length > 0);
   const getName = (employeeId) => employeeId === currentUser?.id ? currentUser?.name : employeeById.get(employeeId)?.name || "Unknown Employee";
+  const laborByJob = Object.values(visibleEntries.filter((entry) => !isDeniedEntry(entry)).reduce((acc, entry) => {
+    const name = String(entry.customerName || "Unnamed Job").trim();
+    const key = jobKey(name);
+    if (!acc[key]) acc[key] = { name, total: 0, employees: {} };
+    const employee = getName(entry.employeeId);
+    const hours = entryHours(entry);
+    acc[key].total += hours;
+    acc[key].employees[employee] = (acc[key].employees[employee] || 0) + hours;
+    return acc;
+  }, {})).sort((a, b) => b.total - a.total);
 
   return (
     <Card className="overflow-hidden">
@@ -3112,6 +3180,15 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
             <MiniStat label="Notes" value={noteCount} tone="cyan" />
             <MiniStat label="Docs" value={documentationCount} tone="cyan" />
           </div>
+
+          {currentUser.role === "admin" && laborByJob.length > 0 && (
+            <section className="rounded-[1.65rem] border border-white/70 bg-white/72 p-4 shadow-sm ring-1 ring-white/70 dark:border-white/10 dark:bg-white/5 dark:ring-white/10">
+              <div className="mb-3"><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Job labor report</p><h3 className="text-lg font-black tracking-[-0.03em]">Hours automatically totaled by job</h3></div>
+              <div className="grid gap-2 lg:grid-cols-2">
+                {laborByJob.map((job) => <div key={jobKey(job.name)} className="min-w-0 rounded-3xl border border-slate-100 bg-white p-4 dark:border-white/10 dark:bg-slate-950/30"><div className="flex min-w-0 items-start justify-between gap-3"><p className="min-w-0 truncate font-black" title={job.name}>{job.name}</p><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{job.total.toFixed(2)}h</span></div><div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(job.employees).sort((a,b) => b[1]-a[1]).map(([name,hours]) => <span key={name} className="max-w-full rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-white/5 dark:text-slate-300"><span className="inline-block max-w-[13rem] truncate align-bottom">{name}</span> · {hours.toFixed(2)}h</span>)}</div></div>)}
+              </div>
+            </section>
+          )}
 
           <div className="grid gap-4 xl:grid-cols-2">
             <DocumentationWeek title={`Week 1 • ${displayShortDate(weekStart)} – ${displayShortDate(addDays(weekStart, 6))}`} entries={weekOneEntries} getName={getName} openDayDetail={openDayDetail} />
