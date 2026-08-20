@@ -5,6 +5,7 @@ import {
   Activity,
   AlertCircle,
   Bell,
+  BarChart3,
   BriefcaseBusiness,
   CalendarDays,
   Camera,
@@ -12,6 +13,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock,
   Download,
   FileText,
@@ -525,6 +527,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
     { id: "dashboard", label: "Home", icon: <Activity /> },
     { id: "timesheets", label: "Timesheets", icon: <CalendarDays /> },
     { id: "exports", label: "Docs", icon: <FileText /> },
+    ...(isAdmin ? [{ id: "reports", label: "Reports", icon: <BarChart3 /> }] : []),
     { id: "add", label: "Add Hours", icon: <Plus /> },
     { id: "review", label: isAdmin ? "Review" : "Entries", icon: <CheckCircle2 /> },
     ...(isAdmin ? [{ id: "manage", label: "Manage", icon: <Users /> }, { id: "history", label: "History", icon: <Clock /> }] : []),
@@ -534,7 +537,7 @@ function SectionNav({ activeSection, setActiveSection, isAdmin }) {
 
   return (
     <motion.nav {...softMotion} className="mb-4 hidden md:block rounded-[1.6rem] border border-white/55 bg-white/72 p-2 shadow-xl shadow-slate-950/8 backdrop-blur-2xl ring-1 ring-white/45 dark:border-white/10 dark:bg-slate-900/66 dark:ring-white/10">
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-9">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-10">
         {items.map((item) => {
           const selected = activeSection === item.id;
           return (
@@ -564,6 +567,7 @@ function MobileBottomNav({ activeSection, setActiveSection, isAdmin, pendingCoun
     ? [
         { id: "manage", label: "Team Controls", icon: <Users /> },
         { id: "history", label: "History + Audit", icon: <Clock /> },
+        { id: "reports", label: "Admin Reports", icon: <BarChart3 /> },
         { id: "exports", label: "Docs + Exports", icon: <FileText /> },
         { id: "updates", label: "Team Updates", icon: <Bell /> },
         { id: "tools", label: "App Tools", icon: <Settings /> },
@@ -1708,8 +1712,13 @@ export default function RestorationHoursTracker() {
     await loadAppData();
   }
 
-  function exportPayrollPdf() {
-    const reportEntries = sortEntriesByDateTime(visibleEntries.filter((entry) => entryApprovalStatus(entry) !== "denied"));
+  function exportPayrollPdf(employeeOverrideId = null) {
+    const scopedEmployeeId = employeeOverrideId || (selectedEmployeeId !== "all" ? selectedEmployeeId : null);
+    const periodDateKeys = new Set([...weekDates, ...weekTwoDates].map((date) => formatDate(date)));
+    const reportSource = currentUser?.role === "admin"
+      ? entries.filter((entry) => periodDateKeys.has(entry.date) && (!scopedEmployeeId || entry.employeeId === scopedEmployeeId))
+      : visibleEntries;
+    const reportEntries = sortEntriesByDateTime(reportSource.filter((entry) => entryApprovalStatus(entry) !== "denied"));
     const escapeHtml = (value) => String(value ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
@@ -1764,8 +1773,8 @@ export default function RestorationHoursTracker() {
         </table>
       </section>`;
 
-    const reportPerson = selectedEmployeeId && selectedEmployeeId !== "all"
-      ? employeeById.get(selectedEmployeeId)
+    const reportPerson = scopedEmployeeId
+      ? employeeById.get(scopedEmployeeId)
       : currentUser;
     const reportName = String(reportPerson?.name || "VODA Employee").trim().split(/\s+/);
     const firstName = (reportPerson?.firstName || reportName[0] || "Employee").replace(/[^a-zA-Z0-9-]/g, "");
@@ -2507,7 +2516,7 @@ export default function RestorationHoursTracker() {
                       <Button variant="outline" aria-label="Next pay period" onClick={() => setWeekStart(addDays(weekStart, 14))} className="h-10 w-10 rounded-[1rem] border-slate-200 bg-white/75 p-0 text-slate-700 hover:bg-white sm:h-14 sm:w-14 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><ChevronRight className="h-5 w-5" /></Button>
                       <Button variant="cool" onClick={() => exportCsv(false)} className="h-10 gap-1.5 rounded-[1rem] px-3 text-xs sm:h-11 sm:px-4 sm:text-sm"><Download className="h-5 w-5" /> CSV</Button>
                       <Button variant="outline" onClick={() => exportDocumentationReport(false)} className="h-10 gap-1.5 rounded-[1rem] border-slate-200 bg-white/75 px-3 text-xs text-slate-700 hover:bg-white sm:h-11 sm:px-4 sm:text-sm dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><FileText className="h-5 w-5" /> Notes</Button>
-                      <Button variant="outline" onClick={exportPayrollPdf} className="h-10 gap-1.5 rounded-[1rem] border-slate-200 bg-white/75 px-3 text-xs text-slate-700 hover:bg-white sm:h-11 sm:px-4 sm:text-sm dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><FileText className="h-5 w-5" /> PDF</Button>
+                      <Button variant="outline" onClick={() => exportPayrollPdf()} className="h-10 gap-1.5 rounded-[1rem] border-slate-200 bg-white/75 px-3 text-xs text-slate-700 hover:bg-white sm:h-11 sm:px-4 sm:text-sm dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><FileText className="h-5 w-5" /> PDF</Button>
                     </div>
                   </div>
 
@@ -2753,6 +2762,17 @@ export default function RestorationHoursTracker() {
               onManage={() => goToSection("manage")}
             />}
 
+            {currentUser.role === "admin" && activeSection === "reports" && <AdminReportsPanel
+              entries={entries}
+              employees={employees}
+              employeeById={employeeById}
+              weekStart={weekStart}
+              setWeekStart={setWeekStart}
+              weekDates={weekDates}
+              weekTwoDates={weekTwoDates}
+              exportPayrollPdf={exportPayrollPdf}
+            />}
+
             {activeSection === "exports" && <DocumentationExportPanel
               currentUser={currentUser}
               employees={employees}
@@ -2868,7 +2888,7 @@ function CapabilityDock({ installPrompt, installApp, notificationPermission, req
     { icon: online ? <Wifi /> : <WifiOff />, label: online ? "Online" : "Offline", value: offlineQueue.length ? `${offlineQueue.length} queued` : "Synced", action: offlineQueue.length ? syncOfflineQueue : null },
     { icon: <Bell />, label: "Notifications", value: notificationPermission === "granted" ? "Enabled" : "Enable", action: notificationPermission !== "granted" && notificationPermission !== "unsupported" ? requestNotifications : null },
     { icon: <FileText />, label: "Job Notes", value: "Export", action: () => exportDocumentationReport(false) },
-    { icon: <FileText />, label: "Hours PDF", value: "Export", action: exportPayrollPdf },
+    { icon: <FileText />, label: "Hours PDF", value: "Export", action: () => exportPayrollPdf() },
   ];
 
   return (
@@ -3117,6 +3137,95 @@ function RecordedShiftModal({ stoppedShiftReview, setStoppedShiftReview, submitR
 }
 
 
+
+function AdminReportsPanel({ entries, employees, employeeById, weekStart, setWeekStart, weekDates, weekTwoDates, exportPayrollPdf }) {
+  const [expandedJobs, setExpandedJobs] = useState({});
+  const [jobSearch, setJobSearch] = useState("");
+  const dateKeys = new Set([...weekDates, ...weekTwoDates].map((date) => formatDate(date)));
+  const periodEntries = sortEntriesByDateTime(entries.filter((entry) => dateKeys.has(entry.date) && !isDeniedEntry(entry)));
+  const activeEmployees = employees.filter((person) => person.active !== false && person.role !== "admin");
+
+  const jobs = Object.values(periodEntries.reduce((acc, entry) => {
+    const displayName = String(entry.customerName || "Unnamed Job").trim();
+    const key = jobKey(displayName);
+    if (!acc[key]) acc[key] = { key, name: displayName, total: 0, entries: [], employees: {}, dates: {} };
+    const hours = entryHours(entry);
+    const employeeName = employeeById.get(entry.employeeId)?.name || "Unknown Employee";
+    acc[key].total += hours;
+    acc[key].entries.push(entry);
+    if (!acc[key].employees[entry.employeeId]) acc[key].employees[entry.employeeId] = { id: entry.employeeId, name: employeeName, total: 0, entries: [] };
+    acc[key].employees[entry.employeeId].total += hours;
+    acc[key].employees[entry.employeeId].entries.push(entry);
+    if (!acc[key].dates[entry.date]) acc[key].dates[entry.date] = { date: entry.date, total: 0, entries: [] };
+    acc[key].dates[entry.date].total += hours;
+    acc[key].dates[entry.date].entries.push(entry);
+    return acc;
+  }, {})).filter((job) => job.name.toLowerCase().includes(jobSearch.trim().toLowerCase())).sort((a, b) => b.total - a.total);
+
+  const employeeSummaries = activeEmployees.map((person) => {
+    const personEntries = periodEntries.filter((entry) => entry.employeeId === person.id);
+    const summary = summarizePayroll(personEntries);
+    return { person, entries: personEntries, summary, jobs: new Set(personEntries.map((entry) => jobKey(entry.customerName))).size };
+  }).sort((a, b) => b.summary.totalHours - a.summary.totalHours);
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-900 p-5 text-white sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Admin reports</p>
+              <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">Labor by job & employee</h2>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Exact two-week labor reporting. Expand any job to see every employee, work date, job type, entry and hour total.</p>
+              <p className="mt-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-200">{displayShortDate(weekStart)} – {displayShortDate(addDays(weekStart, 13))}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Button variant="outline" onClick={() => setWeekStart(addDays(weekStart, -14))} className="border-white/15 bg-white/10 text-white hover:bg-white/15"><ChevronLeft className="h-4 w-4" /></Button>
+              <Button variant="outline" onClick={() => setWeekStart(getMonday(new Date()))} className="border-white/15 bg-white/10 text-white hover:bg-white/15">Current</Button>
+              <Button variant="outline" onClick={() => setWeekStart(addDays(weekStart, 14))} className="border-white/15 bg-white/10 text-white hover:bg-white/15"><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5 p-4 sm:p-5">
+          <section>
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Job breakdown</p><h3 className="text-xl font-black tracking-[-0.04em]">Every job in this pay period</h3></div>
+              <div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={jobSearch} onChange={(e) => setJobSearch(e.target.value)} className="input pl-11" placeholder="Search jobs..." /></div>
+            </div>
+            <div className="space-y-3">
+              {jobs.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-500 dark:border-white/10">No job hours found for this period.</div> : jobs.map((job) => {
+                const open = !!expandedJobs[job.key];
+                const employeeRows = Object.values(job.employees).sort((a,b) => b.total-a.total);
+                const dateRows = Object.values(job.dates).sort((a,b) => a.date.localeCompare(b.date));
+                return <article key={job.key} className="overflow-hidden rounded-[1.6rem] border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
+                  <button type="button" onClick={() => setExpandedJobs((current) => ({ ...current, [job.key]: !open }))} className="flex w-full min-w-0 items-center justify-between gap-3 p-4 text-left sm:p-5">
+                    <div className="min-w-0"><p className="break-words text-base font-black text-slate-950 dark:text-white">{job.name}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.entries.length} entries · {employeeRows.length} employee{employeeRows.length === 1 ? "" : "s"} · {dateRows.length} work day{dateRows.length === 1 ? "" : "s"}</p></div>
+                    <div className="flex shrink-0 items-center gap-2"><span className="rounded-full bg-cyan-50 px-3 py-1.5 text-sm font-black text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200">{job.total.toFixed(2)} hrs</span>{open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</div>
+                  </button>
+                  {open && <div className="border-t border-slate-100 p-4 dark:border-white/10 sm:p-5">
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Employees on this job</p><div className="space-y-2">{employeeRows.map((row) => <div key={row.id} className="rounded-2xl bg-slate-50 p-3 dark:bg-white/5"><div className="flex items-center justify-between gap-3"><span className="min-w-0 break-words text-sm font-black">{row.name}</span><span className="shrink-0 text-sm font-black text-cyan-700 dark:text-cyan-300">{row.total.toFixed(2)} hrs</span></div><div className="mt-2 space-y-1">{row.entries.map((entry) => <div key={entry.id} className="flex flex-wrap justify-between gap-x-3 text-xs font-semibold text-slate-500 dark:text-slate-400"><span>{displayShortDate(entry.date)} · {entry.jobType || "Job"}</span><span>{entryHours(entry).toFixed(2)} hrs</span></div>)}</div></div>)}</div></div>
+                      <div><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Daily job totals</p><div className="space-y-2">{dateRows.map((day) => <div key={day.date} className="rounded-2xl bg-slate-50 p-3 dark:bg-white/5"><div className="flex justify-between gap-3"><span className="text-sm font-black">{displayDate(day.date)}</span><span className="text-sm font-black text-cyan-700 dark:text-cyan-300">{day.total.toFixed(2)} hrs</span></div><p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{day.entries.length} entr{day.entries.length === 1 ? "y" : "ies"}</p></div>)}</div></div>
+                    </div>
+                  </div>}
+                </article>;
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-[1.65rem] border border-slate-200 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5 sm:p-5">
+            <div className="mb-3"><p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Employee hours reports</p><h3 className="text-xl font-black tracking-[-0.04em]">Print an individual employee report</h3><p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">Each report is limited to this two-week pay period and groups that employee’s jobs together by work day.</p></div>
+            <div className="grid gap-2 lg:grid-cols-2">
+              {employeeSummaries.map(({ person, summary, jobs }) => <div key={person.id} className="flex min-w-0 flex-col gap-3 rounded-3xl border border-slate-100 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-slate-950/25 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="break-words font-black">{person.name}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{summary.totalHours.toFixed(2)} hrs · {summary.regularHours.toFixed(2)} regular · {summary.overtimeHours.toFixed(2)} OT · {jobs} job{jobs === 1 ? "" : "s"}</p></div><Button type="button" variant="outline" onClick={() => exportPayrollPdf(person.id)} className="shrink-0"><FileText className="mr-2 h-4 w-4" /> Print Hours Report</Button></div>)}
+            </div>
+          </section>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DocumentationExportPanel({ currentUser, employees, visibleEntries, selectedEmployeeId, setSelectedEmployeeId, search, setSearch, employeeById, weekStart, setWeekStart, weekDates, weekTwoDates, exportCsv, exportDocumentationReport, exportPayrollPdf, openDayDetail }) {
   const weekOneEntries = visibleEntries.filter((entry) => weekDates.some((date) => formatDate(date) === entry.date));
   const weekTwoEntries = visibleEntries.filter((entry) => weekTwoDates.some((date) => formatDate(date) === entry.date));
@@ -3167,7 +3276,7 @@ function DocumentationExportPanel({ currentUser, employees, visibleEntries, sele
             {currentUser.role === "admin" && <select aria-label="Filter documentation by employee" value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="input"><option value="all">All employees</option>{employees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>}
             <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search job documentation" value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11" placeholder="Search job, notes, employee..." /></div>
             <Button variant="outline" onClick={() => exportCsv(false)} className="min-h-[48px]"><Download className="mr-2 h-4 w-4" /> CSV</Button>
-            <Button variant="outline" onClick={exportPayrollPdf} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Hours PDF</Button>
+            <Button variant="outline" onClick={() => exportPayrollPdf()} className="min-h-[48px]"><FileText className="mr-2 h-4 w-4" /> Hours PDF</Button>
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-8">
