@@ -1436,3 +1436,44 @@ select:disabled { opacity: .62; }
 .dark .employee-job-detail, .dark .employee-job-picker-button { background: rgba(10,16,26,.9) !important; border-color: rgba(148,163,184,.14) !important; }
 @media (max-width: 1023px) { .manage-view-switch { top: 4.7rem; } .employee-job-picker { max-height: 280px; } }
 @media (max-width: 640px) { .manage-view-switch { top: 4.2rem; } .employee-job-picker { max-height: 240px; } .employee-job-picker-button { padding: .8rem !important; } .employee-job-detail { padding: .9rem !important; } }
+
+/* VODA 2026-08 stability pass: predictable light/dark surfaces and form controls */
+.light { color-scheme: light; color: #0f172a; }
+.light .input,
+.light input,
+.light select,
+.light textarea {
+  background-color: rgba(255,255,255,.94) !important;
+  color: #0f172a !important;
+  border-color: rgba(148,163,184,.42) !important;
+}
+.light select option { background: #fff !important; color: #0f172a !important; }
+.light input::placeholder,
+.light textarea::placeholder { color: #64748b !important; opacity: .92; }
+.light [class*="dark:bg-"] { color-scheme: light; }
+
+.dark select option {
+  background: #111827 !important;
+  color: #f8fafc !important;
+}
+.dark input[type="date"],
+.dark input[type="time"] { color-scheme: dark; }
+.light input[type="date"],
+.light input[type="time"] { color-scheme: light; }
+
+.light .native-sheet > div {
+  background-color: rgba(255,255,255,.97) !important;
+  border-color: rgba(148,163,184,.32) !important;
+  color: #0f172a !important;
+}
+.dark .native-sheet > div {
+  background-color: rgba(8,13,22,.97) !important;
+  border-color: rgba(255,255,255,.10) !important;
+  color: #f8fafc !important;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  transform: none !important;
+  opacity: .52;
+}

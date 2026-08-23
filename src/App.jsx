@@ -1952,6 +1952,29 @@ export default function RestorationHoursTracker() {
     return masterJob;
   }
 
+  async function insertTimeEntrySafely(payload) {
+    // Production databases may temporarily lag behind the newest frontend schema.
+    // First try the complete payload, then gracefully retry without optional master-job
+    // linkage fields if PostgREST reports that the column is not available yet.
+    let attempt = { ...payload };
+    let response = await supabase.from("time_entries").insert(attempt);
+    if (!response.error) return response;
+
+    const message = String(response.error.message || "").toLowerCase();
+    const jobIdSchemaMismatch = message.includes("job_id") && (
+      message.includes("column") ||
+      message.includes("schema cache") ||
+      message.includes("does not exist")
+    );
+
+    if (jobIdSchemaMismatch && Object.prototype.hasOwnProperty.call(attempt, "job_id")) {
+      const { job_id, ...legacyPayload } = attempt;
+      response = await supabase.from("time_entries").insert(legacyPayload);
+    }
+
+    return response;
+  }
+
   async function addEntry() {
     if (!currentUser || !form.customerName.trim()) {
       setAppError("Please enter a job name or customer name before adding hours.");
@@ -1997,11 +2020,16 @@ export default function RestorationHoursTracker() {
       payload.customer_name = masterJob.customerName;
       normalizedCustomerName = masterJob.customerName;
     } catch (error) {
-      return setAppError(`Unable to create or select the shared master job: ${error.message}`);
+      // Master-job sync should never prevent an employee from recording payroll hours.
+      // Save the typed job name now; the shared directory can be repaired/synced later.
+      payload.job_id = null;
+      payload.job_type = form.jobType;
+      payload.customer_name = normalizedCustomerName;
+      console.warn("Master job sync unavailable; saving hours without job_id.", error);
     }
 
-    const { error } = await supabase.from("time_entries").insert(payload);
-    if (error) return setAppError(error.message);
+    const { error } = await insertTimeEntrySafely(payload);
+    if (error) return setAppError(`Unable to submit hours: ${error.message}`);
     await recordAudit({ action: "submit", label: "Hours submitted", detail: `${normalizedCustomerName} · ${displayDate(form.date)} · ${entryHours(form).toFixed(2)}h`, employeeId: currentUser.id });
     notifyUser("Hours submitted", `${normalizedCustomerName} was added to your timesheet.`);
     setForm({ ...form, jobId: "", customerName: "", notes: "", photoUrl: "", employeeSignature: "" });
@@ -2057,9 +2085,19 @@ export default function RestorationHoursTracker() {
       return;
     }
 
-    const { error } = await supabase.from("time_entries").insert(payload);
-    if (error) return setAppError(error.message);
-    await recordAudit({ action: "submit", label: "Recorded shift submitted", detail: `${stoppedShiftReview.customerName.trim()} · ${displayDate(stoppedShiftReview.date)} · ${entryHours(stoppedShiftReview).toFixed(2)}h`, employeeId: currentUser.id });
+    try {
+      const masterJob = await resolveMasterJob(payload.customer_name, payload.job_type, payload.job_id);
+      payload.job_id = masterJob?.id || null;
+      payload.job_type = masterJob?.jobType || payload.job_type;
+      payload.customer_name = masterJob?.customerName || payload.customer_name;
+    } catch (error) {
+      payload.job_id = null;
+      console.warn("Master job sync unavailable for recorded shift; saving hours without job_id.", error);
+    }
+
+    const { error } = await insertTimeEntrySafely(payload);
+    if (error) return setAppError(`Unable to submit recorded hours: ${error.message}`);
+    await recordAudit({ action: "submit", label: "Recorded shift submitted", detail: `${payload.customer_name} · ${displayDate(stoppedShiftReview.date)} · ${entryHours(stoppedShiftReview).toFixed(2)}h`, employeeId: currentUser.id });
 
     notifyUser("Recorded shift submitted", `${stoppedShiftReview.customerName.trim()} was added to your timesheet.`);
     setStoppedShiftReview(null);
@@ -2073,6 +2111,27 @@ export default function RestorationHoursTracker() {
     goToSection("timesheets");
     if (startAnother) setNextJobOpen(true);
     await loadAppData();
+  }
+
+  function startNextJobManually(job = null) {
+    const now = new Date();
+    setNextJobOpen(false);
+    setForm((current) => ({
+      ...current,
+      date: formatDate(now),
+      jobId: job?.id || "",
+      jobType: job?.jobType || current.jobType || jobTypes[0],
+      customerName: job?.customerName || "",
+      start: formatPhoenixTime(now),
+      end: formatPhoenixTime(now),
+      lunchTaken: false,
+      lunchMinutes: 0,
+      notes: "",
+      photoUrl: "",
+      employeeSignature: "",
+    }));
+    setActiveSection("add");
+    setAppError("");
   }
 
   function closeTransientPanels() {
@@ -3065,7 +3124,7 @@ export default function RestorationHoursTracker() {
       </div>
 
       {settingsOpen && <SettingsModal currentUser={currentUser} profileForm={profileForm} setProfileForm={setProfileForm} setSettingsOpen={setSettingsOpen} saveProfile={saveProfile} uploadProfilePicture={uploadProfilePicture} changePassword={changePassword} notificationPermission={notificationPermission} requestNotifications={requestNotifications} dailyClockReminder={dailyClockReminder} setDailyClockReminder={setDailyClockReminder} />}
-      {nextJobOpen && <NextJobModal activeJobs={activeJobs} onStart={beginLiveShiftForJob} onClose={() => setNextJobOpen(false)} />}
+      {nextJobOpen && <NextJobModal activeJobs={activeJobs} onStartClock={beginLiveShiftForJob} onManual={startNextJobManually} onClose={() => setNextJobOpen(false)} />}
       {stoppedShiftReview && <RecordedShiftModal stoppedShiftReview={stoppedShiftReview} setStoppedShiftReview={setStoppedShiftReview} submitRecordedShift={submitRecordedShift} />}
       {reviewModal && <ReviewModal reviewModal={reviewModal} setReviewModal={setReviewModal} updateStatus={updateStatus} setAppError={setAppError} />}
       {editModal && <EditHoursModal editModal={editModal} setEditModal={setEditModal} saveEditedHours={saveEditedHours} />}
@@ -3272,15 +3331,51 @@ function LiveShiftPanel({ liveShift, startedAt, startLiveShift, stopLiveShiftAnd
   );
 }
 
-function NextJobModal({ activeJobs = [], onStart, onClose }) {
+function NextJobModal({ activeJobs = [], onStartClock, onManual, onClose }) {
   const [search, setSearch] = useState("");
+  const [mode, setMode] = useState(null);
   const filteredJobs = activeJobs.filter((job) => `${job.customerName || ""} ${job.jobNumber || ""} ${job.jobType || ""}`.toLowerCase().includes(search.toLowerCase()));
+  const chooseJob = (job) => mode === "manual" ? onManual(job) : onStartClock(job);
+
   return (
     <div className="native-sheet fixed inset-0 z-[55] flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-md sm:items-center">
-      <motion.div initial={{ opacity: 0, y: 22, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[88vh] w-full max-w-xl overflow-auto rounded-[2rem] border border-white/60 bg-slate-50/95 p-5 shadow-2xl dark:border-white/10 dark:bg-slate-950/95">
-        <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Hours submitted</p><h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">Start the next job</h2><p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">Choose a recent job and the new timer starts immediately.</p></div><Button variant="ghost" onClick={onClose}><X className="h-5 w-5" /></Button></div>
-        <div className="relative mt-4"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-11" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search customer, job number, or type…" /></div>
-        <div className="mt-3 space-y-2">{filteredJobs.map((job) => <button key={job.id} type="button" onClick={() => onStart(job)} className="w-full rounded-3xl border border-white/70 bg-white/75 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/5"><p className="font-black text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</p></button>)}{!filteredJobs.length && <div className="rounded-3xl border border-dashed border-slate-300 p-5 text-center text-sm font-bold text-slate-500 dark:border-white/10">No matching active jobs.</div>}</div>
+      <motion.div initial={{ opacity: 0, y: 22, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-[2rem] border border-slate-200/80 bg-white/95 p-5 text-slate-950 shadow-2xl dark:border-white/10 dark:bg-slate-950/95 dark:text-white">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Previous job saved</p>
+            <h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">What are you doing next?</h2>
+            <p className="mt-1 text-sm font-bold text-slate-600 dark:text-slate-300">The old clock is ended. Start a separate timer for the next job, or enter the next job's hours manually.</p>
+          </div>
+          <Button variant="ghost" onClick={onClose} aria-label="Close start next job"><X className="h-5 w-5" /></Button>
+        </div>
+
+        {!mode ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <button type="button" onClick={() => setMode("clock")} className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 text-left shadow-sm transition hover:-translate-y-0.5 dark:border-cyan-300/20 dark:bg-cyan-400/10">
+              <Clock className="h-6 w-6 text-cyan-700 dark:text-cyan-300" />
+              <p className="mt-3 text-base font-black">Start New Time Clock</p>
+              <p className="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">Starts a brand-new timer now. The previous job stays ended and submitted.</p>
+            </button>
+            <button type="button" onClick={() => setMode("manual")} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left shadow-sm transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-white/[0.06]">
+              <PenLine className="h-6 w-6 text-slate-700 dark:text-slate-200" />
+              <p className="mt-3 text-base font-black">Enter Hours Manually</p>
+              <p className="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">Opens a fresh manual entry with the current time prefilled.</p>
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/[0.05]">
+              <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Next action</p><p className="truncate font-black">{mode === "clock" ? "Start a separate time clock" : "Create a manual hours entry"}</p></div>
+              <Button variant="ghost" onClick={() => { setMode(null); setSearch(""); }}>Change</Button>
+            </div>
+            <div className="relative mt-4"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-11" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search customer, job number, or type…" /></div>
+            <Button type="button" variant="outline" className="mt-3 w-full justify-center" onClick={() => mode === "manual" ? onManual(null) : onStartClock(null)}><Plus className="mr-2 h-4 w-4" /> New / Unlisted Job</Button>
+            <div className="mt-3 space-y-2">
+              {filteredJobs.map((job) => <button key={job.id} type="button" onClick={() => chooseJob(job)} className="w-full rounded-3xl border border-slate-200/80 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"><p className="font-black text-slate-950 dark:text-white">{job.customerName}</p><p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{job.jobType}{job.jobNumber ? ` • ${job.jobNumber}` : ""}</p></button>)}
+              {!filteredJobs.length && <div className="rounded-3xl border border-dashed border-slate-300 p-5 text-center text-sm font-bold text-slate-500 dark:border-white/10 dark:text-slate-400">No matching active jobs. Use New / Unlisted Job above.</div>}
+            </div>
+          </>
+        )}
       </motion.div>
     </div>
   );
